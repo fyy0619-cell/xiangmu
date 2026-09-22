@@ -9,6 +9,8 @@ MPU-9250 6 轴 IMU Linux 驱动,挂在 **IIO(Industrial I/O)** 子系统下,目�
 **STM32MP157(100ASK)**。刻意做到"教程止步之后"的工程完成度,用作嵌入式
 Linux 驱动方向的作品集与面试深聊材料。
 
+> 📖 **项目整体说明(定位 / 技术栈 / 应用场景):**
+> [`docs/项目说明书.md`](docs/%E9%A1%B9%E7%9B%AE%E8%AF%B4%E6%98%8E%E4%B9%A6.md)
 > 设计动机、与 V4L2 的概念对照、功耗工程,见
 > [`Documentation/driver-architecture.md`](Documentation/driver-architecture.md)。
 
