@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MPU-6050 系列生产级 IIO 内核驱动 · 项目说明书</title>
+<style>
+  body { font-family: "Microsoft YaHei","微软雅黑",SimSun,serif; font-size: 11pt; line-height: 1.7; color:#1a1a1a; }
+  h1 { font-size: 26pt; color:#0b3d91; border-bottom:3px solid #0b3d91; padding-bottom:8px; }
+  h2 { font-size:16pt; color:#0b3d91; margin-top:24px; border-left:6px solid #0b3d91; padding-left:10px; }
+  h3 { font-size:13pt; color:#1a4fa0; margin-top:16px; }
+  table { border-collapse: collapse; width:100%; margin:10px 0; font-size:10.5pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code,.mono { font-family:Consolas,"Courier New",monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:10pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:10px; font-family:Consolas,monospace; font-size:9.5pt; line-height:1.45; white-space:pre-wrap; }
+  .cover { text-align:center; padding:60px 0 40px; }
+  .cover .sub { font-size:14pt; color:#555; margin-top:10px; }
+  .meta { margin-top:40px; font-size:11pt; color:#333; }
+  .meta table { width:70%; margin:0 auto; }
+  .tag { display:inline-block; background:#0b3d91; color:#fff; border-radius:4px; padding:2px 10px; font-size:10pt; margin:2px; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .pagebreak { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1 style="border:none;">MPU-6050 系列<br>生产级 IIO 内核驱动</h1>
+  <div class="sub">项目说明书 · Project Manual</div>
+  <div style="margin-top:20px;">
+    <span class="tag">Linux 内核驱动</span>
+    <span class="tag">IIO 子系统</span>
+    <span class="tag">STM32MP157</span>
+    <span class="tag">嵌入式 / BSP</span>
+  </div>
+  <div class="meta">
+    <table>
+      <tr><th>项目名称</th><td>mpu6050-iio(MPU-6050/6500/9250 IIO 驱动)</td></tr>
+      <tr><th>仓库</th><td>github.com/fyy0619-cell/xiangmu</td></tr>
+      <tr><th>作者</th><td>fyy0619-cell</td></tr>
+      <tr><th>目标平台</th><td>STM32MP157 PRO(ARM Cortex-A7,Linux)</td></tr>
+      <tr><th>许可</th><td>GPL-2.0-only</td></tr>
+      <tr><th>日期</th><td>2026-09-22</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="pagebreak"></div>
+
+<h2>一、项目背景</h2>
+
+<h3>1.1 问题出发点</h3>
+<p>网络上绝大多数 MPU-6050 教程止步于"用 I2C 读 14 字节寄存器并 printf 打印",既不挂接内核子系统框架,也不涉及功耗管理、并发保护、事件上报、测试与文档等真实工程要素。这类"例程式"代码在求职面试中无法体现工程深度,且高度雷同,难以证明候选人具备量产驱动的开发能力。</p>
+
+<h3>1.2 项目目标</h3>
+<p>做一个<b>形态上等同于企业实际交付的 vendor BSP 驱动</b>的项目:芯片本身(MPU-6050)虽普通,但把驱动的工程完成度拉到量产水准——多芯片变体抽象、硬件 FIFO 批量搬运、运行时电源管理、运动检测事件、出厂自检、完整设备树绑定与 ABI 文档、持续集成(CI)与测试。差异化不在芯片,而在工程。</p>
+
+<h3>1.3 框架选型理由</h3>
+<p>选择挂接 Linux <b>IIO(Industrial I/O)</b>子系统,而非直接实现裸字符设备。原因:</p>
+<ul>
+  <li>IIO 与相机领域的 <b>V4L2 同源</b>——都是"统一设备模型 + 标准用户空间 ABI + 可选缓冲/硬件触发数据流"的框架思想,但复杂度对入门者更友好。</li>
+  <li>手机 SoC 的传感器子系统正是基于 IIO,方向与高通等 SoC 厂商的岗位高度对口。</li>
+  <li>能完整练到"设备模型 / 通道 / 触发 / 缓冲 / 事件 / 电源"等一整套内核框架能力。</li>
+</ul>
+
+<h3>1.4 面向岗位</h3>
+<p>本项目对应的产业链岗位包括:传感器原厂(TDK InvenSense、Bosch Sensortec、ST)的驱动/应用工程师;SoC 平台厂(高通、联发科、展锐、瑞芯微、NXP)的 sensor 子系统 / BSP 工程师;终端设备厂(手机、可穿戴、无人机、机器人、AR/VR)的内核/驱动集成岗。技能栈是"嵌入式 Linux 驱动 / BSP 工程师"的通用底座。</p>
+
+<div class="pagebreak"></div>
+
+<h2>二、技术栈</h2>
+
+<h3>2.1 内核侧(驱动本体)</h3>
+<table>
+  <tr><th>类别</th><th>采用技术 / 子系统</th><th>作用</th></tr>
+  <tr><td>目标框架</td><td>Linux IIO 子系统</td><td>通道模型、sysfs/字符设备 ABI、buffer、trigger、events</td></tr>
+  <tr><td>寄存器抽象</td><td>regmap(regmap-i2c)</td><td>统一读写、缓存、debugfs dump、总线无关</td></tr>
+  <tr><td>总线</td><td>I2C(i2c_driver)</td><td>与 MPU-6050 通信;预留 SPI 前端扩展</td></tr>
+  <tr><td>设备匹配</td><td>Device Tree + OF match</td><td>compatible = "invensense,mpu6050"</td></tr>
+  <tr><td>数据搬运</td><td>triggered buffer(kfifo)+ 硬件 FIFO 水位</td><td>中断驱动的批量采集</td></tr>
+  <tr><td>中断</td><td>GPIO threaded IRQ + iio_trigger</td><td>DRDY 数据就绪 / FIFO 溢出 / 运动检测</td></tr>
+  <tr><td>电源管理</td><td>runtime PM + system suspend/resume</td><td>autosuspend 到 sleep,省电</td></tr>
+  <tr><td>事件</td><td>IIO events</td><td>wake-on-motion 阈值中断</td></tr>
+  <tr><td>资源管理</td><td>devm_ 全托管</td><td>无手写 remove,错误路径用 dev_err_probe</td></tr>
+  <tr><td>并发</td><td>mutex + claim_direct_mode</td><td>配置写 / 数据读 / 缓冲互斥</td></tr>
+</table>
+
+<h3>2.2 工程配套</h3>
+<table>
+  <tr><th>类别</th><th>技术</th></tr>
+  <tr><td>构建</td><td>Kbuild(双用途 Makefile:外部模块 + 交叉编译)、Kconfig</td></tr>
+  <tr><td>交叉编译</td><td>arm-linux-gnueabihf- 工具链,在 Ubuntu 上 build</td></tr>
+  <tr><td>文档</td><td>DT binding(YAML,可过 dt_binding_check)、sysfs ABI 文档、架构说明</td></tr>
+  <tr><td>CI</td><td>GitHub Actions:拉取 Linux 6.1/6.6 源码 → 配 IIO 依赖 → 编译模块;checkpatch;userspace 构建</td></tr>
+  <tr><td>代码规范</td><td>Linux kernel coding style、SPDX 许可标识、checkpatch</td></tr>
+  <tr><td>验证</td><td>C 测试程序(sysfs 换算校验重力、缓冲流式读取)、上板冒烟脚本</td></tr>
+  <tr><td>版本/许可</td><td>Git、GPL-2.0-only、CHANGELOG、CONTRIBUTING</td></tr>
+</table>
+
+<h3>2.3 硬件与联调环境</h3>
+<ul>
+  <li>板卡:100ASK STM32MP157 PRO(Cortex-A7 + M4,跑完整 Linux)</li>
+  <li>传感器:MPU-6050(I2C 地址 0x68,带 FIFO 与 DRDY/motion 中断)</li>
+  <li>联调:板 ↔ Ubuntu VM 网口直连(TFTP/NFS 加载模块),串口 CH340 @115200 看 dmesg</li>
+</ul>
+
+<div class="pagebreak"></div>
+
+<h2>三、项目流程</h2>
+
+<h3>3.1 开发流程(工程方法)</h3>
+<p>项目采用"设计先行 + 分里程碑"的工程流程,留有完整过程记录(<code>docs/superpowers/</code>):</p>
+<ol>
+  <li><b>需求与设计(spec)</b>:明确框架选型(IIO)、硬件(STM32MP157 + MPU-6050)、范围(生产级),产出设计文档。</li>
+  <li><b>实现计划(plan)</b>:拆成 M1–M4 里程碑,每步含代码、验收命令与预期输出。</li>
+  <li><b>编码实现</b>:按 mainline vendor 驱动方式多文件拆分实现。</li>
+  <li><b>文档与 CI</b>:补 DT binding、ABI、架构说明,配 GitHub Actions 交叉编译。</li>
+  <li><b>硬件 bring-up</b>:按 M1→M4 在真板逐步点亮验证。</li>
+</ol>
+
+<h3>3.2 里程碑</h3>
+<table>
+  <tr><th>里程碑</th><th>内容</th><th>验收</th></tr>
+  <tr><td>M1 板级 bring-up</td><td>设备树节点 + i2c probe + WHO_AM_I + regmap</td><td>dmesg 见设备,i2cdetect 0x68</td></tr>
+  <tr><td>M2 raw 通道 + 量程/采样率</td><td>read/write_raw,scale/offset/ODR,available 列表</td><td>静止合加速度 ≈9.8,iio_info 干净</td></tr>
+  <tr><td>M3 触发缓冲</td><td>triggered buffer,软件触发先跑通</td><td>iio_readdev 出数据</td></tr>
+  <tr><td>M4 硬件触发 + 进阶</td><td>DRDY 中断触发、FIFO 水位、runtime PM、events、self-test</td><td>100Hz 自动流、事件、自检 pass</td></tr>
+</table>
+
+<h3>3.3 运行时数据流</h3>
+<p><b>路径一 · sysfs 单次(direct mode):</b></p>
+<pre>cat in_accel_x_raw
+  → read_raw(RAW)
+  → iio_device_claim_direct_mode()   # 与缓冲互斥
+  → pm_runtime_resume_and_get()      # 唤醒芯片
+  → regmap_bulk_read(ACCEL_XOUT_H)   # 16-bit 大端
+  → 换算返回</pre>
+<p><b>路径二 · 缓冲流式(triggered buffer):</b></p>
+<pre>选通道 scan_elements/*_en → buffer/enable=1
+  → DRDY / FIFO 中断(GPIO IRQ, threaded)
+  → iio_trigger_poll_nested()
+  → pollfunc: 单帧读 或 FIFO 批量 drain
+  → iio_push_to_buffers_with_timestamp()
+  → 用户 read(/dev/iio:deviceN)</pre>
+
+<div class="pagebreak"></div>
+
+<h2>四、项目难点</h2>
+
+<table>
+  <tr><th>难点</th><th>问题</th><th>解决思路</th></tr>
+  <tr>
+    <td>框架抽象与分层</td>
+    <td>如何做到总线无关、可扩展 SPI,而非把 I2C 逻辑写死</td>
+    <td>仿 mainline inv_mpu6050,拆成 core + i2c 两个模块;core 只依赖 regmap 与 iio,总线前端通过 mpu6050_core_probe() 注入</td>
+  </tr>
+  <tr>
+    <td>缓冲 + 硬件触发</td>
+    <td>如何把"硬件中断 → 批量搬运 → 用户读"这条数据流正确接起来,并与 sysfs 单次读互斥</td>
+    <td>triggered buffer + iio_trigger;threaded IRQ 中读 INT_STATUS 后 iio_trigger_poll_nested;单次读用 claim_direct_mode 互斥</td>
+  </tr>
+  <tr>
+    <td>硬件 FIFO 水位</td>
+    <td>每样本一次中断在高 ODR 下功耗/CPU 占用高;需批量搬运</td>
+    <td>watermark>1 时启用片上 FIFO,按 FIFO_COUNT 逐 14 字节帧 drain;通过标准 hwfifo ABI 暴露</td>
+  </tr>
+  <tr>
+    <td>电源管理</td>
+    <td>空闲省电与随取随用的平衡;system suspend 与 runtime 协同</td>
+    <td>runtime PM autosuspend 到 sleep;单次读/缓冲开启前 resume_and_get;system sleep 走 pm_runtime_force_suspend/resume</td>
+  </tr>
+  <tr>
+    <td>自检的整数实现</td>
+    <td>内核禁用浮点,datasheet 的 factory-trim 是浮点多项式</td>
+    <td>测量自检响应(actuator 开-关之差),用整数绝对窗口判定 pass/fail;浮点 trim 作为后续扩展并诚实标注</td>
+  </tr>
+  <tr>
+    <td>并发正确性</td>
+    <td>配置写、单次读、缓冲搬运、事件可能并发访问寄存器</td>
+    <td>st->lock 串行化;缓冲期间拒绝 direct-mode 读;中断用 threaded+ONESHOT 保证可安全做 I2C</td>
+  </tr>
+  <tr>
+    <td>跨内核版本兼容</td>
+    <td>目标板 ST 5.4 BSP 缺少较新 API</td>
+    <td>基线定为 5.15/6.1;为 5.4 提供 pm_runtime_resume_and_get 等最小兼容 shim;CI 对 6.1/6.6 双版本编译</td>
+  </tr>
+  <tr>
+    <td>数据大小端与打包</td>
+    <td>MPU 输出为 16-bit 大端,缓冲扫描需按 scan_index 对齐</td>
+    <td>scan_type 声明 IIO_BE/16bit;寄存器块(accel/temp/gyro)顺序与 enum 一致,整块读入即为合法 scan payload</td>
+  </tr>
+</table>
+
+<div class="pagebreak"></div>
+
+<h2>五、项目细节</h2>
+
+<h3>5.1 代码组织</h3>
+<pre>drivers/iio/imu/mpu6050/
+  mpu6050.h            寄存器映射、chip_info、状态结构、函数原型
+  mpu6050_core.c       设备模型 / 通道 / read|write_raw / PM / probe
+  mpu6050_i2c.c        I2C 前端(模块入口、变体匹配)
+  mpu6050_buffer.c     triggered buffer + DRDY 触发 + FIFO 水位
+  mpu6050_events.c     运动检测阈值事件
+  mpu6050_selftest.c   factory self-test(sysfs)
+  Makefile / Kconfig   双用途构建 + 在树配置</pre>
+
+<h3>5.2 关键设计点</h3>
+<ul>
+  <li><b>多变体 chip_info 表</b>:{name, whoami, has_fifo},probe 时按 WHO_AM_I 校验,支持 6050/6500/9250。</li>
+  <li><b>regmap</b>:统一寄存器访问,自带缓存与 <code>debugfs/regmap/*/registers</code>,换总线零改动。</li>
+  <li><b>通道</b>:accel x/y/z、gyro x/y/z、temp + 软件时间戳;RAW 分离、SCALE 按类型共享、SAMP_FREQ 全局共享;并提供 <code>*_available</code> 列表。</li>
+  <li><b>量程换算</b>:accel/gyro 四档全量程对应 SI 每-LSB 值,以 IIO_VAL_INT_PLUS_NANO 表达。</li>
+  <li><b>采样率</b>:通过 SMPLRT_DIV,rate = 1000/(1+div),校验合法档位。</li>
+  <li><b>触发</b>:自建 data-ready 触发,set_trigger_state 使能片上 DATA_RDY/FIFO_OFLOW 中断。</li>
+  <li><b>事件</b>:accel 运动检测,MOT_THR 阈值 + INT_ENABLE 使能,标准 IIO_EV_TYPE_MAG/RISING。</li>
+  <li><b>自检</b>:每轴测 16 次均值,自检开/关之差落在窗口内即 pass,读后恢复正常配置。</li>
+</ul>
+
+<h3>5.3 与 V4L2 的概念对照</h3>
+<table>
+  <tr><th>概念</th><th>V4L2</th><th>本 IIO 驱动</th></tr>
+  <tr><td>能力描述</td><td>VIDIOC_ENUM_FMT / v4l2_format</td><td>iio_chan_spec[] + *_available</td></tr>
+  <tr><td>能力协商</td><td>协商 format/分辨率</td><td>选 scan_elements + scale/ODR</td></tr>
+  <tr><td>缓冲队列</td><td>vb2_queue(videobuf2)</td><td>iio_buffer(kfifo)</td></tr>
+  <tr><td>硬件触发搬运</td><td>frame-done IRQ → dqbuf</td><td>DRDY/FIFO IRQ → pollfunc push</td></tr>
+  <tr><td>用户取数据</td><td>VIDIOC_DQBUF / read()</td><td>read(/dev/iio:deviceN)</td></tr>
+  <tr><td>多前端</td><td>subdev + media controller</td><td>core + i2c/spi 前端拆分</td></tr>
+</table>
+
+<h3>5.4 应用场景</h3>
+<table>
+  <tr><th>场景</th><th>用到的能力</th></tr>
+  <tr><td>手机/平板 屏幕旋转、计步、姿态</td><td>accel/gyro 数据流 + 低功耗 ODR</td></tr>
+  <tr><td>可穿戴/TWS 佩戴与敲击检测</td><td>运动检测事件、wake-on-motion</td></tr>
+  <tr><td>无人机/平衡车/机器人 姿态解算</td><td>高采样率 + DRDY 硬件触发 + 精确时间戳</td></tr>
+  <tr><td>AR/VR 头显 头部追踪</td><td>高吞吐缓冲流 + FIFO 水位降 CPU 负载</td></tr>
+  <tr><td>IoT 跌落/震动/防拆告警</td><td>运动阈值事件、超低功耗待机</td></tr>
+  <tr><td>工业设备 振动监测</td><td>连续缓冲采集 + libiio 上位机分析</td></tr>
+  <tr><td>always-on sensor hub</td><td>FIFO 批量 + runtime PM,主 CPU 尽量休眠</td></tr>
+</table>
+
+<h3>5.5 现状与已知边界(诚实说明)</h3>
+<ul>
+  <li>代码/文档/CI/测试已完成并推送;硬件 bring-up 按 M1→M4 推进中。</li>
+  <li>内核 API 基线 ≥ 5.15/6.1;STM32MP157 的 ST 5.4 BSP 需 README 中的兼容 shim。</li>
+  <li>self-test 采用整数响应窗口判定;浮点 factory-trim 为后续扩展。</li>
+  <li>FIFO 水位路径当前对整批帧共用一个时间戳,逐帧时间插值为可选增强。</li>
+</ul>
+
+<blockquote>本项目为学习 / 作品集用途,非 Invensense 官方驱动。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
