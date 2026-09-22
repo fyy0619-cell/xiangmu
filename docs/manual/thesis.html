@@ -86,6 +86,7 @@
   <div class="l1">参考文献</div>
   <div class="l1">附录 A　面试高频问答</div>
   <div class="l1">附录 B　上板验证 Checklist(含 5.4 BSP 兼容)</div>
+  <div class="l1">附录 C　V4L2 驱动框架详解(从零讲起)</div>
 </div>
 
 <!-- ============ 第1章 ============ -->
@@ -428,6 +429,89 @@ echo 0 &gt; $D/buffer/enable</pre>
   <tr><td>数据恒为 0 或不变</td><td>芯片仍在 sleep</td><td>确认唤醒(PWR_MGMT_1)、DLPF/采样率配置</td></tr>
   <tr><td>编译报符号未定义</td><td>内核版本低</td><td>按 B.2 加兼容 shim</td></tr>
 </table>
+
+<!-- ============ 附录 C ============ -->
+<div class="pagebreak"></div>
+<h2>附录 C　V4L2 驱动框架详解(从零讲起)</h2>
+<p>本项目所用的 IIO 与相机领域的 V4L2 同源。由于 V4L2 是高通等 SoC 厂商相机方向的核心框架,本附录从零系统介绍 V4L2,并与本项目的 IIO 实现相互印证,帮助读者把"传感器数据采集框架"这一类内核框架的共性彻底吃透。</p>
+
+<h3>C.1 通俗理解:V4L2 是什么</h3>
+<p>V4L2(Video for Linux 2)是 <b>Linux 内核里专门管理视频/图像采集类设备(摄像头、采集卡、编解码器、视频输出等)的标准框架</b>。如果说 IIO 是"传感器界的标准插座",那么 V4L2 就是"视频设备界的标准插座":无论底层是 USB 摄像头还是手机 SoC 上复杂的相机子系统,应用都通过统一的一套接口(操作 <code>/dev/videoN</code>)访问。</p>
+<p>它和 IIO 的设计哲学完全一致——<b>统一设备模型 + 标准用户空间 ABI + 缓冲/硬件触发的数据流</b>。区别在于:IIO 面向"标量传感器数据(几个通道的数值)",数据量小;V4L2 面向"图像帧",数据量大(一帧动辄几 MB),因此更强调零拷贝的缓冲队列(videobuf2)与 DMA。</p>
+
+<h3>C.2 为什么需要 V4L2</h3>
+<p>摄像头的成像链路远比一颗 IMU 复杂:传感器出原始 Bayer 数据,经 MIPI CSI-2 接口传输,再经 ISP 做去马赛克、白平衡、降噪、格式转换,最终成为可用的 YUV/RGB 帧。若每家厂商各自定义接口,应用与中间件将无法通用。V4L2 统一了"格式协商、缓冲管理、流控、以及复杂管线的拓扑描述",使 GStreamer、libcamera、Android Camera HAL 等能以一致方式驱动千差万别的相机硬件。</p>
+
+<h3>C.3 整体架构</h3>
+<p>V4L2 的分层架构如图 C-1 所示。自上而下为:用户空间(相机 App、GStreamer、libcamera)、V4L2 核心(videodev)与 Media Controller 框架、桥接/主驱动(在手机 SoC 上即平台相机驱动,如高通 CAMSS)、以及一组子设备(v4l2_subdev:传感器、CSI-2 接收器、ISP),最底层是摄像头硬件。主驱动向用户暴露 <code>/dev/videoN</code> 采集节点并管理 videobuf2 缓冲队列;各子设备经 Media Controller 串成数据管线。</p>
+<figure><img src="figures/fig_v4l2_arch.png" alt="V4L2架构"><figcaption>图 C-1　V4L2 驱动框架总体架构</figcaption></figure>
+
+<h3>C.4 设备节点与 ioctl ABI</h3>
+<p>与 IIO 主要用 sysfs 属性不同,V4L2 的用户空间 ABI 以 <b>ioctl</b> 为主,围绕 <code>/dev/videoN</code> 展开。核心 ioctl 包括:<code>VIDIOC_QUERYCAP</code>(查询能力)、<code>VIDIOC_ENUM_FMT</code>/<code>VIDIOC_S_FMT</code>(枚举/设置格式)、<code>VIDIOC_REQBUFS</code>(申请缓冲)、<code>VIDIOC_QBUF</code>/<code>VIDIOC_DQBUF</code>(入队/出队缓冲)、<code>VIDIOC_STREAMON</code>/<code>VIDIOC_STREAMOFF</code>(启停采集)。此外还有 <code>/dev/v4l2-subdevX</code>(子设备)与 <code>/dev/mediaN</code>(拓扑)节点。</p>
+
+<h3>C.5 格式协商</h3>
+<p>采集前必须协商"格式":像素格式(如 YUYV、NV12、MJPEG)、分辨率、帧率等。应用用 <code>VIDIOC_ENUM_FMT</code> 枚举驱动支持的格式,用 <code>VIDIOC_S_FMT</code> 设置期望格式,驱动可能回改为最接近的可行值。这一步等价于本项目 IIO 里"选择 scan 通道 + 设置 scale/采样率"的能力协商过程。</p>
+
+<h3>C.6 videobuf2 与流式采集</h3>
+<p>videobuf2(vb2)是 V4L2 的缓冲队列框架,负责缓冲分配、在"应用态/驱动态"之间流转、以及与 DMA 协作。采集时序如图 C-2 所示:应用先 S_FMT 协商、REQBUFS 申请缓冲、mmap 映射并 QBUF 把空缓冲入队、STREAMON 启动;随后进入采集循环——硬件每采一帧经 DMA 写入缓冲并触发帧中断,驱动调用 <code>vb2_buffer_done</code> 把缓冲标记为"满",应用 DQBUF 取出满缓冲处理,处理完再 QBUF 回收;最后 STREAMOFF 停止。</p>
+<figure><img src="figures/fig_v4l2_stream.png" alt="V4L2采集时序"><figcaption>图 C-2　V4L2 videobuf2 流式采集时序</figcaption></figure>
+<p>这条"入队空缓冲→硬件填充→帧中断→出队满缓冲→回收"的环,与本项目 IIO 缓冲流"使能缓冲→DRDY 中断→pollfunc 填充→用户 read"在思想上一一对应,只是 V4L2 因数据量大而采用应用/驱动共享缓冲、显式回收以实现零拷贝。</p>
+
+<h3>C.7 内存模型</h3>
+<table>
+  <tr><th>模型</th><th>缓冲来源</th><th>特点</th></tr>
+  <tr><td>MMAP</td><td>驱动分配,应用 mmap 映射</td><td>最常用;应用与内核共享同一物理缓冲</td></tr>
+  <tr><td>USERPTR</td><td>应用分配,传指针给驱动</td><td>缓冲由用户管理</td></tr>
+  <tr><td>DMABUF</td><td>缓冲以 dma-buf 文件描述符共享</td><td>跨设备零拷贝(如相机→编码器→显示)</td></tr>
+</table>
+
+<h3>C.8 子设备与 Media Controller</h3>
+<p>简单 USB 摄像头一个 <code>/dev/video0</code> 即可;但手机 SoC 的相机由多个功能实体组成(传感器、CSI 接收、多路 ISP),彼此连接方式可配置。<b>Media Controller</b> 框架用"实体(entity)—衬垫(pad)—链路(link)"描述这张拓扑图,经 <code>/dev/mediaN</code> 暴露;每个功能块是一个 <code>v4l2_subdev</code>,可单独经 <code>/dev/v4l2-subdevX</code> 配置其格式与参数。这样复杂管线的每一级都可被独立控制与协商,是 V4L2 相比 IIO 更"重"的部分,也是理解高通相机驱动的关键。</p>
+
+<h3>C.9 编写 V4L2 驱动的骨架</h3>
+<p>一个最小捕获驱动通常包含:注册 <code>v4l2_device</code>、初始化 <code>vb2_queue</code>、填充 <code>video_device</code> 的 ioctl 操作集与文件操作、实现 vb2 队列回调(queue_setup / buf_queue / start_streaming / stop_streaming),并在帧完成中断里调用 <code>vb2_buffer_done</code>。骨架示意:</p>
+<pre>static const struct vb2_ops q_ops = {
+    .queue_setup     = my_queue_setup,   /* 计算缓冲数量/大小 */
+    .buf_queue       = my_buf_queue,     /* 应用入队的空缓冲挂到硬件 */
+    .start_streaming = my_start_stream,  /* 启动 sensor/CSI/DMA */
+    .stop_streaming  = my_stop_stream,
+};
+
+static const struct v4l2_ioctl_ops ioctl_ops = {
+    .vidioc_querycap     = my_querycap,
+    .vidioc_enum_fmt_vid_cap = my_enum_fmt,
+    .vidioc_s_fmt_vid_cap    = my_s_fmt,
+    .vidioc_reqbufs      = vb2_ioctl_reqbufs,
+    .vidioc_qbuf         = vb2_ioctl_qbuf,
+    .vidioc_dqbuf        = vb2_ioctl_dqbuf,
+    .vidioc_streamon     = vb2_ioctl_streamon,
+    .vidioc_streamoff    = vb2_ioctl_streamoff,
+};
+
+/* 帧完成中断底半部 */
+static irqreturn_t frame_done_isr(int irq, void *dev)
+{
+    struct vb2_buffer *vb = /* 取当前硬件缓冲 */;
+    vb2_buffer_done(vb, VB2_BUF_STATE_DONE);  /* 标记满,唤醒 DQBUF */
+    return IRQ_HANDLED;
+}</pre>
+
+<h3>C.10 V4L2 与 IIO 对照及本质联系</h3>
+<table>
+  <tr><th>维度</th><th>V4L2(视频)</th><th>IIO(本项目,传感器)</th></tr>
+  <tr><td>设备节点</td><td>/dev/videoN、/dev/v4l2-subdevX</td><td>/dev/iio:deviceN + sysfs 属性</td></tr>
+  <tr><td>用户 ABI</td><td>ioctl(VIDIOC_*)</td><td>sysfs 读写 + 字符设备</td></tr>
+  <tr><td>能力协商</td><td>ENUM_FMT / S_FMT</td><td>scan_elements + scale/ODR</td></tr>
+  <tr><td>缓冲队列</td><td>videobuf2(vb2_queue)</td><td>iio_buffer(kfifo)</td></tr>
+  <tr><td>硬件触发搬运</td><td>帧完成中断 → vb2_buffer_done</td><td>DRDY 中断 → push_to_buffers</td></tr>
+  <tr><td>取数据</td><td>QBUF/DQBUF(显式回收,零拷贝)</td><td>read(/dev/iio:deviceN)</td></tr>
+  <tr><td>复杂管线</td><td>Media Controller + subdev</td><td>trigger + (可选)多前端</td></tr>
+  <tr><td>数据量级</td><td>大(图像帧,重 DMA)</td><td>小(标量样本)</td></tr>
+</table>
+<p>本质上,V4L2 与 IIO 都是"设备模型 + 标准 ABI + 触发缓冲数据流"这一内核框架范式的具体化。掌握了本项目的 IIO 触发缓冲与设备模型,再理解 V4L2 的 vb2 与 subdev,只是把同一套思想放大到图像与复杂管线场景。这正是本项目对冲击相机/多媒体方向岗位的迁移价值。</p>
+
+<h3>C.11 在高通平台的应用</h3>
+<p>在高通移动平台上,内核侧相机驱动即 <b>CAMSS</b>(Camera Sub-System,位于 <code>drivers/media/platform/qcom/camss</code>),基于 V4L2 + Media Controller 实现 CSID/CSIPHY/VFE 等实体的管线;用户态则有庞大的 Camera HAL / CameraX(CamX-CHI)。理解 V4L2 的 subdev 与 Media Controller,是读懂并参与这类平台相机驱动的前提——这也是把本项目的框架能力延伸到高通相机方向的路径。</p>
 
 <blockquote>本文所述项目为学习与作品集用途,非 Invensense 官方驱动。源码仓库:github.com/fyy0619-cell/xiangmu</blockquote>
 

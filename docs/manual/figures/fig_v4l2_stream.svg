@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="500" viewBox="0 0 820 500" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <marker id="sa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 z" fill="#0b3d91"/>
+    </marker>
+    <marker id="sb" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="498" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">V4L2 videobuf2 流式采集时序</text>
+
+  <!-- lifelines -->
+  <text x="150" y="66" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e8449">应用程序</text>
+  <text x="410" y="66" text-anchor="middle" font-size="13" font-weight="bold" fill="#0b3d91">V4L2 驱动 / vb2</text>
+  <text x="670" y="66" text-anchor="middle" font-size="13" font-weight="bold" fill="#c0392b">摄像头硬件</text>
+  <g stroke="#bbb" stroke-width="1.5" stroke-dasharray="4 4">
+    <line x1="150" y1="76" x2="150" y2="470"/>
+    <line x1="410" y1="76" x2="410" y2="470"/>
+    <line x1="670" y1="76" x2="670" y2="470"/>
+  </g>
+
+  <!-- setup phase -->
+  <g stroke="#0b3d91" stroke-width="2" marker-end="url(#sa)">
+    <line x1="150" y1="100" x2="410" y2="100"/>
+    <line x1="150" y1="132" x2="410" y2="132"/>
+    <line x1="150" y1="164" x2="410" y2="164"/>
+    <line x1="150" y1="196" x2="410" y2="196"/>
+  </g>
+  <g font-size="12" fill="#1a1a1a">
+    <text x="280" y="94" text-anchor="middle">① VIDIOC_S_FMT 协商格式/分辨率</text>
+    <text x="280" y="126" text-anchor="middle">② VIDIOC_REQBUFS 申请缓冲</text>
+    <text x="280" y="158" text-anchor="middle">③ mmap 映射 + QBUF 入队空缓冲</text>
+    <text x="280" y="190" text-anchor="middle">④ VIDIOC_STREAMON 启动采集</text>
+  </g>
+
+  <!-- driver to hw -->
+  <line x1="410" y1="222" x2="670" y2="222" stroke="#0b3d91" stroke-width="2" marker-end="url(#sa)"/>
+  <text x="540" y="216" text-anchor="middle" font-size="12" fill="#0b3d91">配置并启动 sensor/CSI/DMA</text>
+
+  <!-- capture loop -->
+  <rect x="120" y="245" width="580" height="170" rx="8" fill="none" stroke="#c0392b" stroke-dasharray="6 4"/>
+  <text x="150" y="262" font-size="12" fill="#c0392b" font-weight="bold">采集循环</text>
+  <line x1="670" y1="290" x2="410" y2="290" stroke="#c0392b" stroke-width="2" marker-end="url(#sb)"/>
+  <text x="545" y="284" text-anchor="middle" font-size="12" fill="#c0392b">⑤ 一帧就绪:DMA 写入缓冲 + 帧中断</text>
+  <line x1="410" y1="322" x2="150" y2="322" stroke="#0b3d91" stroke-width="2" marker-end="url(#sa)"/>
+  <text x="280" y="316" text-anchor="middle" font-size="12" fill="#0b3d91">⑥ vb2_buffer_done → 缓冲变满</text>
+  <line x1="150" y1="354" x2="410" y2="354" stroke="#1e8449" stroke-width="2" marker-end="url(#sa)"/>
+  <text x="280" y="348" text-anchor="middle" font-size="12" fill="#1e8449">⑦ DQBUF 取出满缓冲,处理图像</text>
+  <line x1="150" y1="386" x2="410" y2="386" stroke="#1e8449" stroke-width="2" marker-end="url(#sa)"/>
+  <text x="280" y="380" text-anchor="middle" font-size="12" fill="#1e8449">⑧ 处理完 QBUF 回收缓冲(循环)</text>
+
+  <!-- stop -->
+  <line x1="150" y1="440" x2="410" y2="440" stroke="#0b3d91" stroke-width="2" marker-end="url(#sa)"/>
+  <text x="280" y="434" text-anchor="middle" font-size="12" fill="#1a1a1a">⑨ VIDIOC_STREAMOFF 停止</text>
+  <text x="410" y="462" text-anchor="middle" font-size="11" fill="#555">对照 IIO:S_FMT↔选 scan 通道,QBUF/DQBUF↔ read 缓冲,帧中断↔ DRDY 触发</text>
+</svg>
