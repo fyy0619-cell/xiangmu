@@ -84,6 +84,8 @@
   <div class="l1">第 7 章　测试与验证</div>
   <div class="l1">第 8 章　总结与展望</div>
   <div class="l1">参考文献</div>
+  <div class="l1">附录 A　面试高频问答</div>
+  <div class="l1">附录 B　上板验证 Checklist(含 5.4 BSP 兼容)</div>
 </div>
 
 <!-- ============ 第1章 ============ -->
@@ -121,6 +123,27 @@
 <p>MPU-6050 集成三轴加速度计、三轴陀螺仪与温度传感器,通过 I2C(地址 0x68/0x69,由 AD0 决定)通信。加速度计支持 ±2/4/8/16 g 四档量程,陀螺仪支持 ±250/500/1000/2000 dps 四档量程,均为 16 位输出。芯片内置 1 KiB 硬件 FIFO 与可编程中断(数据就绪、FIFO 溢出、运动检测),数据寄存器自 <code>ACCEL_XOUT_H</code>(0x3B)起连续 14 字节(加速度 6 + 温度 2 + 陀螺 6),便于一次突发读取。</p>
 
 <h3>2.3 Linux IIO 子系统</h3>
+
+<h4>2.3.1 通俗理解:IIO 到底是什么</h4>
+<p>一句话概括:<b>IIO(Industrial I/O,工业 I/O)是 Linux 内核里专门管理"传感器 / 数据采集类设备"的一套标准接口规范</b>。可以把它理解为传感器界的"USB 标准"或"国标插座"。</p>
+<p>为什么需要它?世界上传感器成千上万——加速度、陀螺、光照、温湿、气压、ADC……如果每家驱动都自定义一套"怎么读数据"的方式,应用程序就得为每一颗传感器单独适配,生态一片混乱。IIO 规定了统一的"读数据的插口":无论底层是哪颗芯片,应用都用同样的方式访问(读 <code>/sys/bus/iio/...</code> 属性或 <code>/dev/iio:deviceN</code> 字符设备)。这样一来,上层应用、Android 传感器框架、libiio 库,一套代码就能通吃各种传感器。</p>
+<p>打个比方:<b>驱动开发者的工作,是把某颗传感器"翻译"成 IIO 标准语言;而应用只需要会说 IIO 标准语言,不必懂每颗芯片的寄存器细节。</b>IIO 就是中间那个"翻译官 + 标准插座"。它主要提供四样东西(用大白话说):</p>
+<p class="noindent">① <b>通道(channel)</b>——传感器能测量的每一个量就是一个通道。MPU-6050 有加速度 x/y/z、角速度 x/y/z、温度,共 7 个通道。<br>
+② <b>sysfs 属性</b>——像读文件一样 <code>cat</code> 一下就得到一个瞬时值,例如 <code>in_accel_x_raw</code>。<br>
+③ <b>缓冲(buffer)+ 字符设备</b>——需要高速连续采集时,数据先攒进内核缓冲,应用像读数据流一样 <code>read /dev/iio:deviceN</code>。<br>
+④ <b>触发(trigger)与事件(event)</b>——"触发"决定何时采一个样(定时器,或传感器自己的数据就绪中断);"事件"用于"超过阈值主动通知你"(如运动检测)。</p>
+<p>它和你已经学过的<b>字符设备</b>是什么关系?IIO 底层其实也是建立在字符设备与 sysfs 之上的,只是在上面加了一层"传感器专用的标准结构"。所以字符设备知识是地基,IIO 是盖在这块地基上、已经标准化好的"楼房"——你不必从零造轮子。下表把大白话与 IIO 术语对应起来:</p>
+<table>
+  <tr><th>大白话</th><th>IIO 术语 / 接口</th></tr>
+  <tr><td>传感器能测的一个量</td><td>通道 channel(<code>iio_chan_spec</code>)</td></tr>
+  <tr><td>读一个瞬时值</td><td>sysfs 属性 <code>in_*_raw</code></td></tr>
+  <tr><td>连续采集的数据流</td><td>缓冲 buffer + <code>/dev/iio:deviceN</code></td></tr>
+  <tr><td>谁来决定"现在采样"</td><td>触发 trigger</td></tr>
+  <tr><td>超阈值主动通知</td><td>事件 event</td></tr>
+  <tr><td>原始值→物理单位换算</td><td>scale / offset 属性</td></tr>
+</table>
+
+<h4>2.3.2 IIO 的标准化机制</h4>
 <p>工业 I/O(IIO)子系统是 Linux 为 ADC、传感器等数据采集类设备提供的标准框架,与相机领域的 V4L2 同源:二者都由"统一设备模型 + 标准用户空间 ABI + 可选缓冲/硬件触发数据流"构成。IIO 通过 <code>iio_chan_spec</code> 描述通道能力,通过 sysfs 暴露单次读取属性,通过 <code>/dev/iio:deviceN</code> 字符设备提供缓冲流式数据,并支持触发(trigger)与事件(event)机制。本项目正是将 MPU-6050 接入这一框架。</p>
 
 <h3>2.4 支撑技术</h3>
@@ -253,6 +276,151 @@
 <p class="noindent">[5] Jonathan Cameron. Industrial I/O — the state of the union. Linux Plumbers Conference.</p>
 <p class="noindent">[6] STMicroelectronics. STM32MP157 Reference Manual (RM0436).</p>
 <p class="noindent">[7] Linux Kernel Documentation. Device Tree Usage; regmap API; Runtime Power Management.</p>
+
+<!-- ============ 附录 A ============ -->
+<div class="pagebreak"></div>
+<h2>附录 A　面试高频问答</h2>
+<p>以下问答围绕本项目展开,覆盖大厂嵌入式驱动岗常见追问。建议每一条都做到"张口能答、能展开、能讲权衡"。</p>
+
+<h3>A.1 IIO 与框架</h3>
+<p class="noindent"><b>Q1　什么是 IIO?为什么不直接用裸字符设备?</b></p>
+<p>答:IIO 是 Linux 管理传感器/数据采集设备的标准子系统,提供统一的通道模型、sysfs 属性、缓冲字符设备、触发与事件。用它而非裸字符设备,是为了复用一整套成熟机制(缓冲队列、触发、时间戳、标准 ABI),让上层应用无需为每颗芯片单独适配;裸字符设备则要自己造这些轮子且不通用。</p>
+<p class="noindent"><b>Q2　IIO 和 V4L2 是什么关系?</b></p>
+<p>答:二者同源,都是"统一设备模型 + 标准用户空间 ABI + 可选缓冲/硬件触发数据流"。对照关系:iio_chan_spec↔ enum_fmt、scan_mask 选通道↔ 协商 format、iio_buffer↔ vb2_queue、DRDY 中断触发↔ frame-done 中断、read(/dev/iio:deviceN)↔ VIDIOC_DQBUF。</p>
+<p class="noindent"><b>Q3　iio_chan_spec 里的 scan_index / scan_type 有什么用?</b></p>
+<p>答:scan_index 决定该通道在缓冲扫描负载中的排列次序;scan_type 声明位宽、存储位宽、符号与大小端(本项目为有符号 16 位大端 IIO_BE)。缓冲搬运时内核据此按 scan_mask 打包数据。</p>
+
+<h3>A.2 驱动机制</h3>
+<p class="noindent"><b>Q4　probe 里做了哪些事?为什么用 regmap?</b></p>
+<p>答:probe 依次分配 iio_dev 与私有状态、使能供电、读 WHO_AM_I 校验芯片、复位并唤醒、配置默认量程/采样率,再注册缓冲、事件、PM 与 IIO 设备。用 regmap 是因为它统一了寄存器读写、自带缓存与 debugfs 导出,并使驱动与具体总线解耦——换 SPI 时核心代码零改动。</p>
+<p class="noindent"><b>Q5　为什么把 core 和 i2c 拆成两个模块?</b></p>
+<p>答:仿主线 inv_mpu6050。总线无关的设备逻辑放 core,总线相关放前端;将来新增 SPI 只需再写一个前端调用同一 mpu6050_core_probe(),core 不动一行。这是"面向接口、可独立演进"的边界设计。</p>
+<p class="noindent"><b>Q6　设备和驱动是怎么匹配上的?</b></p>
+<p>答:设备树节点的 compatible 字符串与驱动的 of_device_id 表匹配,内核 OF 框架据此绑定并调用 probe;of_device_id 的 .data 携带芯片变体信息。</p>
+<p class="noindent"><b>Q7　devm_ 系列有什么好处?</b></p>
+<p>答:设备生命周期托管资源,设备移除或 probe 失败时自动逆序释放,免去手写 remove 与易错的错误回退路径,减少资源泄漏。</p>
+
+<h3>A.3 中断与并发</h3>
+<p class="noindent"><b>Q8　为什么用线程化中断(threaded IRQ)而不是普通顶半部?</b></p>
+<p>答:因为中断处理里要通过 I2C 读传感器,而 I2C 传输可能睡眠,不能在原子的顶半部上下文执行。线程化中断把处理放进内核线程,允许睡眠,配合 ONESHOT 保证处理完再开中断。</p>
+<p class="noindent"><b>Q9　中断里能用 mutex 吗?spinlock 与 mutex 怎么选?</b></p>
+<p>答:普通(硬)中断上下文不能睡,不能用 mutex,只能用 spinlock;本项目中断是线程化的,处于可睡眠上下文,故可用 mutex。选择原则:临界区短、不睡、可能被中断上下文访问→ spinlock;临界区长或涉及睡眠(如 I2C)→ mutex。</p>
+<p class="noindent"><b>Q10　claim_direct_mode 解决什么问题?</b></p>
+<p>答:防止"缓冲采集"与"sysfs 单次读"并发访问寄存器造成竞争。开启缓冲后 sysfs 单次读会被拒绝(-EBUSY),二者互斥。</p>
+<p class="noindent"><b>Q11　请完整讲一遍从中断到用户 read 的数据流。</b></p>
+<p>答:传感器 INT 拉高→ GPIO 线程化中断读 INT_STATUS 判源→ iio_trigger_poll_nested 唤醒底半部 pollfunc→ pollfunc 突发读 14 字节(或按 FIFO_COUNT 批量 drain)并打时间戳→ iio_push_to_buffers_with_timestamp 入 kfifo→ 用户 read(/dev/iio:deviceN) 取出。</p>
+
+<h3>A.4 电源与性能</h3>
+<p class="noindent"><b>Q12　runtime PM 是什么?autosuspend 怎么工作?</b></p>
+<p>答:运行时电源管理,按引用计数管理设备是否活动。设备空闲(计数归零)并超过 autosuspend 延时后自动挂起(本项目置芯片 SLEEP);被访问时 resume_and_get 唤醒。系统级睡眠经 pm_runtime_force_suspend/resume 与之协同。</p>
+<p class="noindent"><b>Q13　FIFO 水位为什么省电?代价是什么?</b></p>
+<p>答:不再每个样本中断一次,而是攒够 N 帧到片上 FIFO 才中断一次,中断/唤醒次数降到 1/N,CPU 可多睡,功耗下降;代价是引入约 N/ODR 的延迟。典型的功耗-延迟权衡。</p>
+<p class="noindent"><b>Q14　wake-on-motion 有什么意义?</b></p>
+<p>答:主机可休眠,靠加速度超阈值的运动中断唤醒,而非持续轮询,是 always-on 场景的关键省电手段。</p>
+
+<h3>A.5 数据与换算</h3>
+<p class="noindent"><b>Q15　raw 值怎么变成 m/s²?scale 从哪来?</b></p>
+<p>答:物理量 = raw × scale。加速度 scale = 9.80665 × 量程(g)/ 32768;陀螺 scale =(π/180)× 量程(dps)/ 32768。驱动按当前量程档位返回对应 scale,用户乘算即得 SI 值。</p>
+<p class="noindent"><b>Q16　为什么 scan_type 用大端(IIO_BE)?</b></p>
+<p>答:MPU-6050 数据寄存器高字节在前(大端),突发读入的 16 位需按大端解释再转有符号;声明 IIO_BE 让 IIO 与用户态按正确字节序理解缓冲数据。</p>
+<p class="noindent"><b>Q17　采样率怎么设?</b></p>
+<p>答:通过 SMPLRT_DIV,输出率 = 内部基准率 /(1+div)(DLPF 开启时基准 1 kHz),驱动校验合法档位后写寄存器并回读一致。</p>
+
+<h3>A.6 基础(与项目挂钩,大厂必问)</h3>
+<p class="noindent"><b>Q18　volatile 的作用?和寄存器访问什么关系?</b></p>
+<p>答:volatile 告诉编译器该变量可能被外部(硬件/其他线程)改变,禁止把读写优化掉或缓存到寄存器,保证每次都真正访存。MMIO 寄存器访问要用 volatile 语义(内核用 readl/writel 等封装),否则可能读到过期值或丢写。</p>
+<p class="noindent"><b>Q19　内存屏障 / DMA 一致性简述。</b></p>
+<p>答:屏障用于约束乱序执行/编译器重排,保证跨核或与设备交互时的可见性与顺序(如 wmb/rmb、dma_wmb)。DMA 场景需保证 CPU 缓存与设备看到的数据一致,用 dma_map/unmap 或一致性内存。本项目走 I2C 无 DMA,但概念是通用考点。</p>
+<p class="noindent"><b>Q20　怎么调试内核驱动?</b></p>
+<p>答:dev_dbg/dynamic debug 动态开日志、printk 观察流程、debugfs(regmap 寄存器导出)、ftrace/trace_printk 看时序、/proc/interrupts 看中断计数、逻辑分析仪抓 I2C/INT 波形、oops/panic 看调用栈,必要时 kgdb。</p>
+
+<h3>A.7 项目追问(诚实作答)</h3>
+<p class="noindent"><b>Q21　和主线 inv_mpu6050 比,你这个缺什么?</b></p>
+<p>答:主线支持更全(DMP、magn、更完整的 FIFO/时间戳/自检浮点公式、i2c-mux 从设备等)。我这个是为吃透框架而自研的精简版,self-test 用整数近似、FIFO 时间戳整批共用,均在文档中如实标注。价值在于我能解释每一行,而非移植。</p>
+<p class="noindent"><b>Q22　你遇到的最大坑是什么?</b></p>
+<p>答:(结合实测填写)如跨内核版本 API 差异(5.4 BSP 缺 pm_runtime_resume_and_get 等)、中断上下文不能睡导致必须线程化、缓冲与单次读的并发互斥、大小端与 scan 打包对齐等。</p>
+<p class="noindent"><b>Q23　还有什么没做好、下一步怎么改?</b></p>
+<p>答:FIFO 水位逐帧时间戳插值、完整浮点 factory-trim 自检、SPI 前端、mount-matrix、9250 磁力计/DMP。承认边界比假装完美更可信。</p>
+
+<!-- ============ 附录 B ============ -->
+<div class="pagebreak"></div>
+<h2>附录 B　上板验证 Checklist(含 5.4 BSP 兼容)</h2>
+<p>目标:把"代码写好"变成"真板跑通并有证据"。按顺序逐项打勾。</p>
+
+<h3>B.1 前置检查</h3>
+<table>
+  <tr><th>项</th><th>命令 / 做法</th><th>期望</th></tr>
+  <tr><td>内核源码与工具链</td><td>虚拟机上确认 MP157 内核源码路径与 arm-linux-gnueabihf- 工具链</td><td>能编内核模块</td></tr>
+  <tr><td>IIO 配置</td><td>zcat /proc/config.gz | grep -E "IIO|REGMAP_I2C"</td><td>CONFIG_IIO/IIO_BUFFER/IIO_TRIGGERED_BUFFER/IIO_SYSFS_TRIGGER/REGMAP_I2C 为 y 或 m</td></tr>
+  <tr><td>I2C 总线</td><td>i2cdetect -y &lt;bus&gt;</td><td>0x68 处出现设备</td></tr>
+  <tr><td>内核版本</td><td>uname -r</td><td>确定是否需 B.2 兼容 shim(&lt; 5.15)</td></tr>
+</table>
+
+<h3>B.2 针对 5.4 BSP 的最小兼容 shim</h3>
+<p>若板子内核低于 5.15/5.10,新建 <code>compat.h</code> 并在各 .c 顶部包含,提供缺失符号:</p>
+<pre>#include &lt;linux/version.h&gt;
+
+#if LINUX_VERSION_CODE &lt; KERNEL_VERSION(5,9,0)
+/* dev_err_probe:简化版(不特判 EPROBE_DEFER,bring-up 足够) */
+#define dev_err_probe(dev, err, fmt, ...) \
+    ({ dev_err(dev, fmt, ##__VA_ARGS__); (err); })
+#endif
+
+#if LINUX_VERSION_CODE &lt; KERNEL_VERSION(5,10,0)
+static inline int pm_runtime_resume_and_get(struct device *dev)
+{ int r = pm_runtime_get_sync(dev); if (r &lt; 0) pm_runtime_put_noidle(dev); return r; }
+#endif
+
+#if LINUX_VERSION_CODE &lt; KERNEL_VERSION(5,15,0)
+static inline void mpu6050_pm_off(void *d) { pm_runtime_disable(d); }
+#define devm_pm_runtime_enable(d) \
+    ({ pm_runtime_enable(d); devm_add_action_or_reset(d, mpu6050_pm_off, d); })
+#endif</pre>
+<p>另注:<code>regmap_noinc_read</code> 自 5.4 起提供;若更老可用循环多次 <code>regmap_read(FIFO_R_W)</code> 替代。老内核 i2c 驱动 probe 原型为 <code>probe(client, id)</code>,如报错按此改。</p>
+
+<h3>B.3 编译</h3>
+<pre>cd drivers/iio/imu/mpu6050
+make KDIR=/path/to/mp157-kernel ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf-
+# 期望产出:mpu6050-core.ko  mpu6050-i2c.ko,无 error</pre>
+
+<h3>B.4 设备树</h3>
+<p>把 <code>dt/stm32mp157-mpu6050-overlay.dts</code> 的 I2C 控制器、INT 所接 GPIO 改成实际接线,编译进 dtb 或做 overlay,重启。</p>
+
+<h3>B.5 加载与 M1–M4 验收</h3>
+<pre>insmod mpu6050-core.ko && insmod mpu6050-i2c.ko    # 先 core 后 i2c
+dmesg | tail                                        # M1:mpu6050 registered (irq=..)
+D=/sys/bus/iio/devices/iio:device0
+iio_info                                            # M2:枚举通道/属性
+cat $D/in_accel_scale $D/in_accel_z_raw             # M2:静止 |a|≈9.8
+# M3/M4:缓冲流
+for a in x y z; do echo 1 &gt; $D/scan_elements/in_accel_${a}_en; done
+echo 1 &gt; $D/scan_elements/in_timestamp_en
+echo 100 &gt; $D/sampling_frequency
+echo $(cat $D/name)-dev0 &gt; $D/trigger/current_trigger
+echo 1 &gt; $D/buffer/enable
+timeout 2 iio_readdev -b 64 iio:device0 | wc -c     # ≈200 样本/2s
+echo 0 &gt; $D/buffer/enable</pre>
+
+<h3>B.6 证据清单(面试用)</h3>
+<table>
+  <tr><th>证据</th><th>怎么拿</th></tr>
+  <tr><td>probe 成功日志</td><td>dmesg 截图(含 WHO_AM_I / registered)</td></tr>
+  <tr><td>通道枚举</td><td>iio_info 输出截图</td></tr>
+  <tr><td>量程正确</td><td>read_raw 程序输出 |a|≈9.8 截图</td></tr>
+  <tr><td>缓冲吞吐</td><td>iio_readdev 速率与设定 ODR 一致</td></tr>
+  <tr><td>硬件时序</td><td>逻辑分析仪抓 I2C 波形 + INT 中断脉冲</td></tr>
+  <tr><td>中断计数</td><td>cat /proc/interrupts | grep mpu6050 增长</td></tr>
+</table>
+
+<h3>B.7 常见故障排查</h3>
+<table>
+  <tr><th>现象</th><th>可能原因</th><th>排查</th></tr>
+  <tr><td>i2cdetect 看不到 0x68</td><td>接线/上拉/AD0/供电</td><td>查 SCL/SDA 上拉、AD0 电平、3V3、共地</td></tr>
+  <tr><td>probe 报 WHO_AM_I 不符</td><td>地址错/串扰/假货</td><td>确认 0x68/0x69,降 I2C 速率到 100k 试</td></tr>
+  <tr><td>缓冲无数据</td><td>触发未选/中断没接</td><td>确认 current_trigger 已设、/proc/interrupts 计数增长</td></tr>
+  <tr><td>数据恒为 0 或不变</td><td>芯片仍在 sleep</td><td>确认唤醒(PWR_MGMT_1)、DLPF/采样率配置</td></tr>
+  <tr><td>编译报符号未定义</td><td>内核版本低</td><td>按 B.2 加兼容 shim</td></tr>
+</table>
 
 <blockquote>本文所述项目为学习与作品集用途,非 Invensense 官方驱动。源码仓库:github.com/fyy0619-cell/xiangmu</blockquote>
 
