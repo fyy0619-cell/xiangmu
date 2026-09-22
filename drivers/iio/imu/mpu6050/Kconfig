@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# In-tree Kconfig fragment. To integrate, source this from
+# drivers/iio/imu/Kconfig and add the directory to drivers/iio/imu/Makefile.
+
+config MPU6050_IIO
+	tristate "Invensense MPU-6050 family IMU (learning driver)"
+	depends on I2C
+	select REGMAP_I2C
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Say Y here to build support for the Invensense MPU-6050 / MPU-6500 /
+	  MPU-9250 6-axis IMUs (accelerometer + gyroscope + temperature) using
+	  the IIO framework, with data-ready and hardware-FIFO-watermark
+	  triggered buffers, motion-detection events, runtime PM and self-test.
+
+	  This driver is organised as a core library plus an I2C front-end:
+	  mpu6050-core and mpu6050-i2c.
