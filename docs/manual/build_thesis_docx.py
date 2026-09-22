@@ -224,9 +224,24 @@ DOC_OPEN = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
             'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
             '<w:body>')
-DOC_CLOSE = ('<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
-             '<w:pgMar w:top="1247" w:right="1134" w:bottom="1247" w:left="1134"/>'
+DOC_CLOSE = ('<w:sectPr>'
+             '<w:footerReference w:type="default" r:id="rId3"/>'
+             '<w:pgSz w:w="11906" w:h="16838"/>'
+             '<w:pgMar w:top="1247" w:right="1134" w:bottom="1418" w:left="1134" '
+             'w:header="720" w:footer="680" w:gutter="0"/>'
              '</w:sectPr></w:body></w:document>')
+
+_FT_RPR = ('<w:rPr><w:rFonts w:ascii="Microsoft YaHei" w:eastAsia="Microsoft YaHei" '
+           'w:hAnsi="Microsoft YaHei"/><w:sz w:val="18"/><w:color w:val="666666"/></w:rPr>')
+FOOTER = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+          '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+          '<w:p><w:pPr><w:jc w:val="center"/></w:pPr>'
+          '<w:r>%s<w:t xml:space="preserve">第 </w:t></w:r>'
+          '<w:fldSimple w:instr=" PAGE "><w:r>%s<w:t>1</w:t></w:r></w:fldSimple>'
+          '<w:r>%s<w:t xml:space="preserve"> 页 / 共 </w:t></w:r>'
+          '<w:fldSimple w:instr=" NUMPAGES "><w:r>%s<w:t>1</w:t></w:r></w:fldSimple>'
+          '<w:r>%s<w:t xml:space="preserve"> 页</w:t></w:r>'
+          '</w:p></w:ftr>' % (_FT_RPR, _FT_RPR, _FT_RPR, _FT_RPR, _FT_RPR))
 
 
 def main():
@@ -243,6 +258,8 @@ def main():
               '<Default Extension="png" ContentType="image/png"/>'
               '<Override PartName="/word/document.xml" '
               'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+              '<Override PartName="/word/footer1.xml" '
+              'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
               '</Types>')
     rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
@@ -250,7 +267,10 @@ def main():
             'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
             'Target="word/document.xml"/></Relationships>')
     drels = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">']
+             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+             '<Relationship Id="rId3" '
+             'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" '
+             'Target="footer1.xml"/>']
     for rid, arc, _ in media:
         drels.append('<Relationship Id="rId%d" '
                      'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
@@ -261,6 +281,7 @@ def main():
         z.writestr("[Content_Types].xml", ctypes)
         z.writestr("_rels/.rels", rels)
         z.writestr("word/document.xml", document)
+        z.writestr("word/footer1.xml", FOOTER)
         z.writestr("word/_rels/document.xml.rels", "".join(drels))
         for _, arc, path in media:
             z.write(path, "word/" + arc)
