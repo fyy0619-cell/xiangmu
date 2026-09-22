@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="560" viewBox="0 0 820 560" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <marker id="fa" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="558" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">系统总体框架(分层架构)</text>
+
+  <!-- user space -->
+  <rect x="80" y="55" width="660" height="70" rx="8" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="410" y="80" text-anchor="middle" font-size="15" font-weight="bold" fill="#1e8449">用户空间</text>
+  <text x="410" y="104" text-anchor="middle" font-size="12" fill="#333">iio_info · libiio(iio_readdev) · sysfs 属性 · /dev/iio:deviceN · iio_event_monitor</text>
+
+  <!-- IIO core -->
+  <rect x="80" y="150" width="660" height="60" rx="8" fill="#e8eef8" stroke="#0b3d91" stroke-width="2"/>
+  <text x="410" y="176" text-anchor="middle" font-size="15" font-weight="bold" fill="#0b3d91">Linux IIO 子系统核心(内核)</text>
+  <text x="410" y="197" text-anchor="middle" font-size="12" fill="#333">通道模型 · sysfs/chardev ABI · buffer(kfifo) · trigger · events · 统一时间戳</text>
+
+  <!-- core module -->
+  <rect x="80" y="235" width="660" height="150" rx="8" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="410" y="258" text-anchor="middle" font-size="15" font-weight="bold" fill="#0b3d91">mpu6050-core.ko(总线无关设备逻辑)</text>
+  <g font-size="12" fill="#1a1a1a">
+    <rect x="100" y="272" width="150" height="44" rx="5" fill="#fff" stroke="#5b8def"/><text x="175" y="290" text-anchor="middle">core:设备模型</text><text x="175" y="307" text-anchor="middle">通道/read·write_raw/PM</text>
+    <rect x="262" y="272" width="150" height="44" rx="5" fill="#fff" stroke="#5b8def"/><text x="337" y="290" text-anchor="middle">buffer:触发缓冲</text><text x="337" y="307" text-anchor="middle">DRDY触发/FIFO水位</text>
+    <rect x="424" y="272" width="140" height="44" rx="5" fill="#fff" stroke="#5b8def"/><text x="494" y="290" text-anchor="middle">events</text><text x="494" y="307" text-anchor="middle">运动检测事件</text>
+    <rect x="576" y="272" width="144" height="44" rx="5" fill="#fff" stroke="#5b8def"/><text x="648" y="290" text-anchor="middle">selftest</text><text x="648" y="307" text-anchor="middle">出厂自检</text>
+  </g>
+  <rect x="220" y="330" width="380" height="40" rx="5" fill="#f9e79f" stroke="#b9770e"/>
+  <text x="410" y="355" text-anchor="middle" font-size="13" fill="#7a5209" font-weight="bold">regmap(寄存器抽象:缓存 · debugfs · 总线无关)</text>
+
+  <!-- bus front ends -->
+  <rect x="150" y="410" width="240" height="56" rx="8" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="270" y="433" text-anchor="middle" font-size="14" font-weight="bold" fill="#0b3d91">mpu6050-i2c.ko</text>
+  <text x="270" y="453" text-anchor="middle" font-size="11" fill="#333">I2C 前端(模块入口·变体匹配)</text>
+
+  <rect x="430" y="410" width="240" height="56" rx="8" fill="#f4f4f4" stroke="#9b9b9b" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="550" y="433" text-anchor="middle" font-size="14" font-weight="bold" fill="#777">mpu6050-spi.ko(可扩展)</text>
+  <text x="550" y="453" text-anchor="middle" font-size="11" fill="#777">复用同一 core_probe()</text>
+
+  <!-- hardware -->
+  <rect x="80" y="492" width="660" height="52" rx="8" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
+  <text x="410" y="515" text-anchor="middle" font-size="15" font-weight="bold" fill="#b9770e">MPU-6050 / 6500 / 9250 硬件(I2C 总线)</text>
+  <text x="410" y="534" text-anchor="middle" font-size="11" fill="#555">chip_info 能力表抽象多变体</text>
+
+  <!-- arrows -->
+  <line x1="410" y1="125" x2="410" y2="150" stroke="#0b3d91" stroke-width="2" marker-end="url(#fa)"/>
+  <line x1="410" y1="210" x2="410" y2="235" stroke="#0b3d91" stroke-width="2" marker-end="url(#fa)"/>
+  <line x1="270" y1="385" x2="270" y2="410" stroke="#0b3d91" stroke-width="2" marker-end="url(#fa)"/>
+  <line x1="270" y1="466" x2="270" y2="492" stroke="#0b3d91" stroke-width="2" marker-end="url(#fa)"/>
+
+  <text x="762" y="180" text-anchor="middle" font-size="11" fill="#666" transform="rotate(90 762 180)">iio_info 回调</text>
+</svg>

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="430" viewBox="0 0 820 430" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <marker id="gh" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#c0392b"/>
+    </marker>
+    <marker id="gd" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/>
+    </marker>
+    <marker id="gg" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#1e8449"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="428" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="410" y="34" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">振动式 MEMS 陀螺仪与科里奥利效应</text>
+
+  <!-- outer frame -->
+  <rect x="250" y="90" width="320" height="240" rx="10" fill="none" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="410" y="112" text-anchor="middle" font-size="12" fill="#7f8c8d">敏感结构(驱动 + 检测两个自由度)</text>
+
+  <!-- proof mass -->
+  <rect x="360" y="180" width="100" height="70" rx="6" fill="#5b8def" stroke="#0b3d91" stroke-width="2"/>
+  <text x="410" y="220" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">振动质量 m</text>
+
+  <!-- drive velocity v (horizontal oscillation) -->
+  <line x1="410" y1="150" x2="510" y2="150" stroke="#0b3d91" stroke-width="3" marker-end="url(#gd)"/>
+  <line x1="410" y1="150" x2="310" y2="150" stroke="#0b3d91" stroke-width="3" marker-end="url(#gd)"/>
+  <text x="410" y="142" text-anchor="middle" font-size="14" fill="#0b3d91" font-weight="bold">驱动振动速度 v</text>
+
+  <!-- angular rate omega (rotation) -->
+  <path d="M410,290 m-60,0 a60,60 0 1 1 120,0" fill="none" stroke="#1e8449" stroke-width="3" marker-end="url(#gg)"/>
+  <text x="410" y="320" text-anchor="middle" font-size="14" fill="#1e8449" font-weight="bold">角速度 Ω</text>
+
+  <!-- Coriolis force (vertical) -->
+  <line x1="410" y1="215" x2="410" y2="120" stroke="#c0392b" stroke-width="3" marker-end="url(#gh)"/>
+  <text x="470" y="132" text-anchor="middle" font-size="13" fill="#c0392b" font-weight="bold">科里奥利力 Fc</text>
+  <text x="470" y="150" text-anchor="middle" font-size="11" fill="#c0392b">(检测方向)</text>
+
+  <!-- formulas -->
+  <rect x="90" y="358" width="640" height="56" rx="6" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="410" y="380" text-anchor="middle" font-size="14" fill="#1a1a1a">科里奥利力 Fc = −2·m·(Ω × v)</text>
+  <text x="410" y="402" text-anchor="middle" font-size="12" fill="#555">质量在垂直于驱动方向上产生正比于 Ω 的微位移 → 检测电容变化 → 角速度 raw 值</text>
+</svg>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>基于 Linux IIO 子系统的 MPU-6050 系列惯性传感器驱动设计与实现</title>
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:11pt; line-height:1.75; color:#1a1a1a; }
+  h1 { font-size:22pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:16pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:4px; margin-top:26px; }
+  h3 { font-size:13.5pt; color:#123a7a; margin-top:18px; }
+  h4 { font-size:12pt; color:#1a4fa0; margin-top:12px; }
+  p { text-indent:2em; margin:8px 0; text-align:justify; }
+  .noindent, li { text-indent:0; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9.5pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:10px; font-family:Consolas,monospace; font-size:9pt; line-height:1.4; white-space:pre-wrap; text-indent:0; }
+  figure { text-align:center; margin:16px 0; page-break-inside:avoid; }
+  figure img { max-width:96%; border:1px solid #e0e0e0; }
+  figcaption { font-size:10pt; color:#444; margin-top:6px; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; text-indent:0; }
+  .cover { text-align:center; padding-top:120px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .meta { margin-top:120px; font-size:13pt; }
+  .cover .meta table { width:60%; margin:0 auto; border:none; }
+  .cover .meta td { border:none; text-align:left; font-size:12.5pt; padding:6px 10px; }
+  .abstract-title { text-align:center; font-size:15pt; font-weight:bold; color:#0b3d91; margin-top:10px; }
+  .kw { margin-top:10px; }
+  .pagebreak { page-break-before:always; }
+  .toc div { margin:5px 0; }
+  .toc .l1 { font-weight:bold; }
+  .toc .l2 { margin-left:2em; color:#333; }
+</style>
+</head>
+<body>
+
+<!-- ============ 封面 ============ -->
+<div class="cover">
+  <div class="big">基于 Linux IIO 子系统的<br>MPU-6050 系列惯性传感器<br>驱动设计与实现</div>
+  <div class="sub" style="margin-top:30px;font-size:14pt;color:#555;">Design and Implementation of an MPU-6050 Family Inertial Sensor Driver Based on the Linux IIO Subsystem</div>
+  <div class="meta">
+    <table>
+      <tr><td>项目名称</td><td>mpu6050-iio</td></tr>
+      <tr><td>作　　者</td><td>fyy0619-cell</td></tr>
+      <tr><td>目标平台</td><td>STM32MP157 PRO(ARM Cortex-A7)</td></tr>
+      <tr><td>子 系 统</td><td>Linux Industrial I/O(IIO)</td></tr>
+      <tr><td>代码仓库</td><td>github.com/fyy0619-cell/xiangmu</td></tr>
+      <tr><td>日　　期</td><td>2026 年 9 月</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ============ 摘要 ============ -->
+<div class="pagebreak"></div>
+<div class="abstract-title">摘　要</div>
+<p>惯性测量单元(IMU)是移动与嵌入式设备实现姿态感知、运动检测与导航的基础器件。本项目面向 STM32MP157 嵌入式 Linux 平台,为 Invensense MPU-6050 系列六轴 IMU(三轴加速度计 + 三轴陀螺仪 + 温度)设计并实现了一个挂接在 Linux 工业 I/O(Industrial I/O,IIO)子系统下的、达到量产工程标准的内核设备驱动。</p>
+<p>与网络上仅停留于"读取寄存器并打印"的示例不同,本驱动系统地实现了多芯片变体抽象、基于 regmap 的寄存器访问、可配置量程与采样率、数据就绪(DRDY)硬件触发的缓冲数据流、片上 FIFO 水位批量搬运、运动检测阈值事件、运行时电源管理(runtime PM)以及出厂自检等完整功能;并配套设备树绑定文档、sysfs ABI 文档、持续集成(CI)与用户态测试程序,采用与 Linux 主线 vendor 驱动一致的多文件模块化组织(core 与 i2c 分离)。</p>
+<p>本文从 MEMS 惯性传感器的物理原理出发,依次阐述系统总体设计、硬件连接设计与软件详细实现,重点分析了触发缓冲、FIFO 水位、电源管理与并发控制等关键工程难点及其解决方案,并给出测试与验证方法。该项目验证了在通用 SoC 平台上以标准内核框架交付高完成度传感器驱动的可行性,可作为嵌入式 Linux 驱动 / BSP 方向的工程实践参考。</p>
+<div class="kw"><b>关键词：</b>Linux 内核驱动；IIO 子系统；MPU-6050；MEMS 惯性传感器；触发缓冲；电源管理；设备树</div>
+
+<div class="pagebreak"></div>
+<div class="abstract-title">Abstract</div>
+<p class="noindent">The Inertial Measurement Unit (IMU) is a fundamental component for attitude sensing, motion detection and navigation in mobile and embedded devices. This project designs and implements a production-grade Linux kernel driver for the Invensense MPU-6050 family six-axis IMU (3-axis accelerometer + 3-axis gyroscope + temperature) on the STM32MP157 embedded Linux platform, built on the Linux Industrial I/O (IIO) subsystem.</p>
+<p class="noindent">Unlike online examples that merely read registers and print values, this driver systematically implements multi-variant abstraction, regmap-based register access, configurable full-scale range and output data rate, a data-ready (DRDY) hardware-triggered buffered data path, on-chip FIFO watermark batching, motion-detection threshold events, runtime power management, and factory self-test. It is accompanied by device-tree bindings, sysfs ABI documentation, continuous integration and user-space test programs, and follows the multi-file modular organization (core / i2c split) of upstream Linux vendor drivers.</p>
+<div class="kw"><b>Keywords:</b> Linux kernel driver; IIO subsystem; MPU-6050; MEMS inertial sensor; triggered buffer; power management; device tree</div>
+
+<!-- ============ 目录 ============ -->
+<div class="pagebreak"></div>
+<h2 style="border:none;text-align:center;">目　录</h2>
+<div class="toc">
+  <div class="l1">第 1 章　绪论</div>
+  <div class="l2">1.1 研究背景与意义　1.2 国内外研究现状　1.3 本项目主要工作　1.4 论文组织结构</div>
+  <div class="l1">第 2 章　相关理论与技术基础</div>
+  <div class="l2">2.1 MEMS 惯性传感器物理原理　2.2 MPU-6050 芯片特性　2.3 Linux IIO 子系统　2.4 支撑技术</div>
+  <div class="l1">第 3 章　系统总体设计</div>
+  <div class="l2">3.1 需求分析　3.2 总体架构　3.3 模块划分　3.4 数据通路设计</div>
+  <div class="l1">第 4 章　硬件设计</div>
+  <div class="l2">4.1 硬件平台　4.2 连接设计　4.3 设备树描述　4.4 联调环境</div>
+  <div class="l1">第 5 章　软件详细设计与实现</div>
+  <div class="l2">5.1 探测与 regmap　5.2 通道与数据读取　5.3 触发缓冲与 FIFO　5.4 事件　5.5 电源管理　5.6 自检</div>
+  <div class="l1">第 6 章　关键技术难点与解决方案</div>
+  <div class="l1">第 7 章　测试与验证</div>
+  <div class="l1">第 8 章　总结与展望</div>
+  <div class="l1">参考文献</div>
+</div>
+
+<!-- ============ 第1章 ============ -->
+<div class="pagebreak"></div>
+<h2>第 1 章　绪论</h2>
+
+<h3>1.1 研究背景与意义</h3>
+<p>随着智能手机、可穿戴设备、无人机与机器人等产品的普及,惯性测量单元(IMU)已成为消费电子与工业设备中最基础、出货量最大的传感器之一。IMU 通过测量三轴加速度与三轴角速度,为屏幕旋转、计步、姿态解算、运动唤醒、跌落检测、导航融合等功能提供原始数据。在以 Linux 为操作系统的嵌入式平台上,传感器要被上层应用使用,必须由内核驱动将其接入标准的子系统框架,向用户空间暴露统一、稳定的接口。</p>
+<p>然而,网络上绝大多数 MPU-6050 教程仅停留于"用 I2C 读取 14 字节数据寄存器并打印数值"的层面,既不接入内核子系统,也不涉及电源管理、并发保护、事件上报、缓冲搬运、测试与文档等真实工程要素。这类示例难以体现工程能力,也无法直接用于产品。因此,研究并实现一个"形态等同于企业量产交付"的传感器内核驱动,对于嵌入式 Linux 驱动 / BSP 方向的工程实践具有明确意义。</p>
+
+<h3>1.2 国内外研究现状</h3>
+<p>Linux 主线内核已在 <code>drivers/iio/imu/</code> 下收录了多款 IMU 的 IIO 驱动,如 Invensense 的 <code>inv_mpu6050</code>、Bosch 的 <code>bmi160</code>、STMicroelectronics 的 <code>st_lsm6dsx</code> 等。这些驱动由芯片原厂与社区共同维护,普遍采用 regmap 抽象、触发缓冲、硬件 FIFO、runtime PM 等成熟机制,并遵循统一的 IIO 用户空间 ABI。工业界方面,高通、联发科等 SoC 厂商在其移动平台上构建了以 IIO / 传感器 HAL 为基础的传感器子系统,并高度重视 always-on 低功耗采集能力。</p>
+<p>本项目在充分借鉴主线 <code>inv_mpu6050</code> 组织方式的基础上,从零自研一套精简但完整的 MPU-6050 系列驱动,目的在于完整掌握框架各层机制,而非移植既有代码。</p>
+
+<h3>1.3 本项目主要工作</h3>
+<p>本项目完成的主要工作包括:(1)基于 IIO 子系统实现 MPU-6050/6500/9250 多变体驱动,core 与 i2c 前端分离;(2)实现 accel/gyro/temp 通道及可配置量程与采样率;(3)实现 DRDY 硬件触发的缓冲数据流与片上 FIFO 水位批量搬运;(4)实现运动检测事件与 runtime 电源管理;(5)实现出厂自检;(6)配套设备树绑定、sysfs ABI 文档、GitHub Actions 持续集成与用户态测试程序。</p>
+
+<h3>1.4 论文组织结构</h3>
+<p>本文共八章:第 2 章介绍 MEMS 传感器物理原理与 IIO 等支撑技术;第 3 章给出系统总体设计;第 4 章描述硬件连接与设备树;第 5 章详述软件实现;第 6 章分析关键难点;第 7 章给出测试与验证;第 8 章总结全文并展望。</p>
+
+<!-- ============ 第2章 ============ -->
+<div class="pagebreak"></div>
+<h2>第 2 章　相关理论与技术基础</h2>
+
+<h3>2.1 MEMS 惯性传感器物理原理</h3>
+<h4>2.1.1 电容式加速度计</h4>
+<p>MPU-6050 的加速度计采用微机电系统(MEMS)电容式结构。如图 2-1 所示,一个由弹簧悬挂的检验质量(proof mass)可沿敏感轴方向移动,其上带有可动电极,与固定电极构成一对差分电容。当器件受到加速度 <i>a</i> 时,检验质量因惯性产生位移 <i>x</i>,依据牛顿第二定律与胡克定律,有 <i>x = m·a / k</i>,其中 <i>m</i> 为质量、<i>k</i> 为弹簧刚度。位移改变两固定电极间的差分电容 ΔC,经电容-电压转换与模数转换后得到与加速度成正比的 16 位有符号原始值。</p>
+<figure><img src="figures/fig_accel_principle.png" alt="加速度计原理"><figcaption>图 2-1　电容式 MEMS 加速度计工作原理</figcaption></figure>
+
+<h4>2.1.2 振动式陀螺仪与科里奥利效应</h4>
+<p>陀螺仪基于科里奥利(Coriolis)效应测量角速度。如图 2-2 所示,检验质量沿驱动方向做受控高频振动,速度为 <i>v</i>;当器件绕敏感轴以角速度 Ω 旋转时,质量在垂直于驱动方向上受到科里奥利力 <i>F<sub>c</sub> = −2m(Ω × v)</i>,产生正比于 Ω 的微位移,由检测电容拾取,从而得到角速度原始值。驱动与检测两个自由度的正交设计是 MEMS 陀螺的核心。</p>
+<figure><img src="figures/fig_gyro_principle.png" alt="陀螺仪原理"><figcaption>图 2-2　振动式 MEMS 陀螺仪与科里奥利效应</figcaption></figure>
+
+<h3>2.2 MPU-6050 芯片特性</h3>
+<p>MPU-6050 集成三轴加速度计、三轴陀螺仪与温度传感器,通过 I2C(地址 0x68/0x69,由 AD0 决定)通信。加速度计支持 ±2/4/8/16 g 四档量程,陀螺仪支持 ±250/500/1000/2000 dps 四档量程,均为 16 位输出。芯片内置 1 KiB 硬件 FIFO 与可编程中断(数据就绪、FIFO 溢出、运动检测),数据寄存器自 <code>ACCEL_XOUT_H</code>(0x3B)起连续 14 字节(加速度 6 + 温度 2 + 陀螺 6),便于一次突发读取。</p>
+
+<h3>2.3 Linux IIO 子系统</h3>
+<p>工业 I/O(IIO)子系统是 Linux 为 ADC、传感器等数据采集类设备提供的标准框架,与相机领域的 V4L2 同源:二者都由"统一设备模型 + 标准用户空间 ABI + 可选缓冲/硬件触发数据流"构成。IIO 通过 <code>iio_chan_spec</code> 描述通道能力,通过 sysfs 暴露单次读取属性,通过 <code>/dev/iio:deviceN</code> 字符设备提供缓冲流式数据,并支持触发(trigger)与事件(event)机制。本项目正是将 MPU-6050 接入这一框架。</p>
+
+<h3>2.4 支撑技术</h3>
+<p><b>regmap：</b>内核统一的寄存器访问抽象,提供读写、缓存与 debugfs 寄存器导出,并使驱动与具体总线解耦。<b>设备树(Device Tree)：</b>以 <code>compatible</code> 字符串描述硬件并匹配驱动,声明 I2C 地址、中断与供电。<b>线程化中断(threaded IRQ)：</b>将中断底半部放入内核线程,允许在其中安全执行 I2C 传输。<b>runtime PM：</b>运行时电源管理框架,支持空闲自动挂起与按需唤醒。</p>
+
+<!-- ============ 第3章 ============ -->
+<div class="pagebreak"></div>
+<h2>第 3 章　系统总体设计</h2>
+
+<h3>3.1 需求分析</h3>
+<p>系统需满足以下需求:功能上,提供加速度、角速度、温度的单次与连续采集,支持量程/采样率配置、硬件触发缓冲、运动事件与自检;非功能上,遵循 IIO 标准 ABI、具备良好的低功耗特性、保证并发安全、易于扩展到 SPI 等其他总线、并具备完整文档与可持续集成的工程规范。</p>
+
+<h3>3.2 总体架构</h3>
+<p>系统采用分层架构,如图 3-1 所示。自上而下依次为:用户空间(iio_info / libiio / sysfs / 字符设备)、IIO 核心、<code>mpu6050-core.ko</code>(总线无关设备逻辑,内部再分 core/buffer/events/selftest 四个编译单元)、regmap 抽象、总线前端(<code>mpu6050-i2c.ko</code>,并预留 SPI)、以及底层 MPU-6050 硬件。core 与 i2c 分离,使得将来新增 SPI 前端仅需复用同一 <code>mpu6050_core_probe()</code>。</p>
+<figure><img src="figures/fig_framework.png" alt="系统框架"><figcaption>图 3-1　系统总体框架(分层架构)</figcaption></figure>
+
+<h3>3.3 模块划分</h3>
+<table>
+  <tr><th>模块</th><th>文件</th><th>职责</th></tr>
+  <tr><td>核心</td><td>mpu6050_core.c</td><td>设备模型、通道、read/write_raw、电源管理、probe 入口</td></tr>
+  <tr><td>总线前端</td><td>mpu6050_i2c.c</td><td>I2C 匹配与 regmap 创建,模块入口</td></tr>
+  <tr><td>缓冲</td><td>mpu6050_buffer.c</td><td>触发缓冲、DRDY 触发、FIFO 水位</td></tr>
+  <tr><td>事件</td><td>mpu6050_events.c</td><td>运动检测阈值事件</td></tr>
+  <tr><td>自检</td><td>mpu6050_selftest.c</td><td>出厂自检(sysfs)</td></tr>
+  <tr><td>头文件</td><td>mpu6050.h</td><td>寄存器映射、chip_info、状态结构、原型</td></tr>
+</table>
+
+<h3>3.4 数据通路设计</h3>
+<p>系统设计两条数据通路,如图 3-2 所示。路径一为 sysfs 单次读取:用户读取 <code>in_accel_x_raw</code>,驱动在 direct 模式下唤醒芯片、突发读取寄存器并换算返回。路径二为缓冲流式:用户选择扫描通道并使能缓冲后,由 DRDY/FIFO 中断驱动底半部批量搬运数据到内核缓冲,用户经字符设备读取。两路通过 <code>claim_direct_mode</code> 互斥。</p>
+<figure><img src="figures/fig_dataflow.png" alt="数据流"><figcaption>图 3-2　两条数据通路(sysfs 单次与缓冲流式)</figcaption></figure>
+
+<!-- ============ 第4章 ============ -->
+<div class="pagebreak"></div>
+<h2>第 4 章　硬件设计</h2>
+
+<h3>4.1 硬件平台</h3>
+<p>目标平台为 100ASK STM32MP157 PRO 开发板,主控为意法半导体 STM32MP157(双核 Cortex-A7 + Cortex-M4),运行完整 Linux。传感器为 MPU-6050 模块,经 I2C 与主控相连。</p>
+
+<h3>4.2 连接设计</h3>
+<p>硬件连接如图 4-1 所示。MPU-6050 的 SCL、SDA 分别接主控 I2C 控制器,并通过约 4.7 kΩ 电阻上拉至 3.3 V(I2C 为漏极开路总线,必须外部上拉);INT 引脚接一路 GPIO,用于数据就绪、FIFO 溢出与运动检测中断;AD0 接地使器件地址为 0x68;VCC 接 3.3 V,GND 与主控共地。</p>
+<figure><img src="figures/fig_hardware.png" alt="硬件连接"><figcaption>图 4-1　硬件连接图(STM32MP157 ↔ I2C ↔ MPU-6050)</figcaption></figure>
+
+<h3>4.3 设备树描述</h3>
+<p>在设备树中以子节点描述该器件,声明 <code>compatible</code>、I2C 地址、中断父节点与引脚、供电等,内核据此匹配驱动并获取资源:</p>
+<pre>&amp;i2c5 {
+    status = "okay";
+    clock-frequency = &lt;400000&gt;;
+    imu@68 {
+        compatible = "invensense,mpu6050";
+        reg = &lt;0x68&gt;;
+        interrupt-parent = &lt;&amp;gpioa&gt;;
+        interrupts = &lt;5 IRQ_TYPE_EDGE_RISING&gt;;
+        vdd-supply = &lt;&amp;v3v3&gt;;
+    };
+};</pre>
+
+<h3>4.4 联调环境</h3>
+<p>开发板经 USB 网口转换器与 Ubuntu 虚拟机网口直连,虚拟机提供 TFTP/NFS 服务用于加载内核模块;主控串口经 CH340 以 115200 波特率输出内核日志(dmesg),便于调试。交叉编译在虚拟机上使用 <code>arm-linux-gnueabihf-</code> 工具链完成。</p>
+
+<!-- ============ 第5章 ============ -->
+<div class="pagebreak"></div>
+<h2>第 5 章　软件详细设计与实现</h2>
+
+<h3>5.1 探测与 regmap</h3>
+<p>I2C 前端在 probe 中创建 regmap 并调用核心探测函数。核心探测依次完成:分配 <code>iio_dev</code> 与私有状态、使能供电、读取 <code>WHO_AM_I</code> 校验芯片(与 chip_info 表中期望值比对)、复位并唤醒芯片、配置默认量程与采样率,最后注册缓冲、事件、电源管理与 IIO 设备。所有资源均以 <code>devm_</code> 托管,错误路径统一用 <code>dev_err_probe</code>。</p>
+
+<h3>5.2 通道与数据读取</h3>
+<p>驱动以 <code>iio_chan_spec</code> 数组描述 accel x/y/z、gyro x/y/z、temp 及软件时间戳通道。<code>read_raw</code> 支持原始值、量程(SCALE)、偏置(OFFSET)与采样率;<code>write_raw</code> 支持量程与采样率配置;并提供 <code>*_available</code> 列表。原始值读取以 regmap 突发读取 16 位大端数据并转为有符号数。量程换算将四档全量程映射为国际单位每-LSB 值。采样率通过 <code>SMPLRT_DIV</code> 寄存器设置,满足 rate = 1000/(1+div)。</p>
+
+<h3>5.3 触发缓冲与 FIFO 水位</h3>
+<p>缓冲数据流是本驱动的核心。驱动通过 <code>iio_triggered_buffer_setup</code> 挂接 kfifo 缓冲与底半部处理函数,并注册一个数据就绪触发。DRDY 硬件触发的时序如图 5-1 所示:芯片 INT 拉高后,线程化中断读取 <code>INT_STATUS</code> 判定中断源,调用 <code>iio_trigger_poll_nested</code> 唤醒底半部;底半部按扫描掩码突发读取数据并打上时间戳,推入内核缓冲,用户经字符设备读取。</p>
+<figure><img src="figures/fig_timing.png" alt="触发时序"><figcaption>图 5-1　数据就绪(DRDY)硬件触发时序图</figcaption></figure>
+<p>为降低高采样率下的中断与唤醒开销,驱动实现了片上 FIFO 水位批量搬运,如图 5-2 所示。当水位阈值大于 1 时,传感器将样本持续写入 1 KiB 硬件 FIFO,累积到阈值才触发一次中断,底半部据 <code>FIFO_COUNT</code> 逐 14 字节帧批量搬运。相比每样本一次中断,中断次数降至 1/N,显著降低功耗与 CPU 占用,代价是引入约 N/ODR 的延迟——这是典型的功耗-延迟工程权衡。</p>
+<figure><img src="figures/fig_fifo.png" alt="FIFO水位"><figcaption>图 5-2　硬件 FIFO 水位批量搬运机制</figcaption></figure>
+
+<h3>5.4 运动检测事件</h3>
+<p>驱动将加速度计的运动中断封装为标准的 IIO 上升沿幅值事件。用户通过 sysfs 写入阈值(<code>MOT_THR</code> 寄存器)并使能事件后,加速度超过阈值即由中断上报事件到事件队列,可用于"运动唤醒"而无需轮询。</p>
+
+<h3>5.5 电源管理</h3>
+<p>驱动采用 runtime PM,状态机如图 5-3 所示。设备空闲一段时间(默认 2 秒)后经 autosuspend 自动进入 sleep(置 <code>PWR_MGMT_1.SLEEP</code>);单次读取、缓冲开启或事件到来时经 <code>pm_runtime_resume_and_get</code> 唤醒。系统级挂起/恢复经 <code>pm_runtime_force_suspend/resume</code> 与运行时状态协同。配合 FIFO 水位与运动唤醒,主 CPU 可长时间休眠。</p>
+<figure><img src="figures/fig_pm_state.png" alt="电源状态机"><figcaption>图 5-3　运行时电源管理(runtime PM)状态机</figcaption></figure>
+
+<h3>5.6 出厂自检</h3>
+<p>驱动通过 sysfs 属性触发出厂自检。由于内核禁用浮点,自检采用整数实现:对每一轴分别在自检激励关闭与开启两种状态下多次采样求均值,以二者之差(自检响应)是否落在依据数据手册确定的绝对计数窗口内判定通过与否,读取后恢复正常配置。</p>
+
+<!-- ============ 第6章 ============ -->
+<div class="pagebreak"></div>
+<h2>第 6 章　关键技术难点与解决方案</h2>
+<table>
+  <tr><th>难点</th><th>问题</th><th>解决方案</th></tr>
+  <tr><td>框架抽象与分层</td><td>如何做到总线无关、可扩展,而非把 I2C 写死</td><td>仿主线 inv_mpu6050,拆 core+i2c 两模块;core 仅依赖 regmap 与 iio,前端经 core_probe 注入</td></tr>
+  <tr><td>缓冲与硬件触发</td><td>如何把"中断→批量搬运→用户读"接起来并与单次读互斥</td><td>triggered buffer + iio_trigger;线程化中断中 poll;单次读用 claim_direct_mode 互斥</td></tr>
+  <tr><td>FIFO 水位</td><td>高 ODR 下每样本中断功耗高</td><td>水位&gt;1 时启用片上 FIFO,按 FIFO_COUNT 逐帧 drain,经标准 hwfifo ABI 暴露</td></tr>
+  <tr><td>电源管理</td><td>省电与随取随用的平衡</td><td>runtime PM autosuspend;读取/缓冲前 resume;系统睡眠走 force_suspend/resume</td></tr>
+  <tr><td>自检整数化</td><td>内核禁浮点,手册为浮点公式</td><td>用整数绝对窗口判定自检响应,浮点 factory-trim 作为扩展</td></tr>
+  <tr><td>并发正确性</td><td>配置写/单次读/缓冲/事件并发访问寄存器</td><td>mutex 串行化;缓冲期拒绝 direct 读;中断 threaded+ONESHOT</td></tr>
+  <tr><td>跨内核兼容</td><td>目标板 5.4 BSP 缺新 API</td><td>基线定为 5.15/6.1,为 5.4 提供最小兼容 shim;CI 对 6.1/6.6 双版本编译</td></tr>
+  <tr><td>大小端与打包</td><td>16 位大端输出,缓冲需按 scan_index 对齐</td><td>scan_type 声明 IIO_BE/16bit;寄存器块顺序与枚举一致,整块读入即合法负载</td></tr>
+</table>
+
+<!-- ============ 第7章 ============ -->
+<div class="pagebreak"></div>
+<h2>第 7 章　测试与验证</h2>
+<h3>7.1 测试方案</h3>
+<p>测试分三层:编译层由 GitHub Actions 对 Linux 6.1/6.6 交叉编译并运行 checkpatch 风格检查;单元行为层由用户态程序读取 sysfs 并交叉验证物理量;系统层在真实开发板上按里程碑逐项点亮。</p>
+<h3>7.2 里程碑与用例</h3>
+<table>
+  <tr><th>里程碑</th><th>内容</th><th>验收标准</th></tr>
+  <tr><td>M1 板级 bring-up</td><td>设备树 + probe + WHO_AM_I + regmap</td><td>dmesg 见设备,i2cdetect 见 0x68</td></tr>
+  <tr><td>M2 通道与量程</td><td>read/write_raw、scale/ODR、available</td><td>静止合加速度 ≈ 9.8 m/s²,iio_info 正常</td></tr>
+  <tr><td>M3 触发缓冲</td><td>软件触发跑通缓冲管道</td><td>iio_readdev 输出非空</td></tr>
+  <tr><td>M4 硬件触发与进阶</td><td>DRDY 触发、FIFO、PM、事件、自检</td><td>100 Hz 自动流、事件可捕获、自检通过</td></tr>
+</table>
+<h3>7.3 验证方法</h3>
+<p>关键验证包括:以静止时加速度合矢量应约等于重力加速度 9.8 m/s² 校验量程换算正确;以 <code>iio_readdev</code> 采集速率与设定采样率一致校验触发链路;以相邻样本时间戳差校验时序;以错误 I2C 地址触发 probe 干净失败校验错误处理。</p>
+
+<!-- ============ 第8章 ============ -->
+<div class="pagebreak"></div>
+<h2>第 8 章　总结与展望</h2>
+<p>本项目在 STM32MP157 平台上基于 Linux IIO 子系统,从零实现了一个达到量产工程标准的 MPU-6050 系列惯性传感器驱动,完整覆盖多变体抽象、触发缓冲、FIFO 水位、运动事件、电源管理与自检,并配套设备树绑定、ABI 文档、持续集成与测试。项目验证了以标准内核框架在通用 SoC 平台交付高完成度传感器驱动的方法与可行性。</p>
+<p>后续可从以下方向扩展:增加 SPI 总线前端;实现 mount-matrix 安装旋转;支持 MPU-9250 的磁力计与 DMP;为 FIFO 水位路径实现逐帧时间戳插值;以及完善基于数据手册浮点公式的完整出厂自检。</p>
+
+<!-- ============ 参考文献 ============ -->
+<div class="pagebreak"></div>
+<h2>参考文献</h2>
+<p class="noindent">[1] InvenSense. MPU-6000 and MPU-6050 Product Specification, Rev 3.4. 2013.</p>
+<p class="noindent">[2] InvenSense. MPU-6000/MPU-6050 Register Map and Descriptions, Rev 4.2. 2013.</p>
+<p class="noindent">[3] Linux Kernel Documentation. Industrial I/O (IIO) subsystem. kernel.org/doc.</p>
+<p class="noindent">[4] Linux Kernel Source. drivers/iio/imu/inv_mpu6050/. torvalds/linux.</p>
+<p class="noindent">[5] Jonathan Cameron. Industrial I/O — the state of the union. Linux Plumbers Conference.</p>
+<p class="noindent">[6] STMicroelectronics. STM32MP157 Reference Manual (RM0436).</p>
+<p class="noindent">[7] Linux Kernel Documentation. Device Tree Usage; regmap API; Runtime Power Management.</p>
+
+<blockquote>本文所述项目为学习与作品集用途,非 Invensense 官方驱动。源码仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>

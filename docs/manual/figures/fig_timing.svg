@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="440" viewBox="0 0 820 440" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <marker id="ta" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="438" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">数据就绪(DRDY)硬件触发时序图</text>
+
+  <!-- lifelines -->
+  <g font-size="12" font-weight="bold" fill="#0b3d91">
+    <text x="110" y="70" text-anchor="middle">MPU-6050</text>
+    <text x="280" y="70" text-anchor="middle">GPIO 中断线程</text>
+    <text x="450" y="70" text-anchor="middle">iio_trigger</text>
+    <text x="610" y="70" text-anchor="middle">pollfunc</text>
+    <text x="750" y="70" text-anchor="middle">用户进程</text>
+  </g>
+  <g stroke="#bbb" stroke-width="1.5" stroke-dasharray="4 4">
+    <line x1="110" y1="80" x2="110" y2="400"/>
+    <line x1="280" y1="80" x2="280" y2="400"/>
+    <line x1="450" y1="80" x2="450" y2="400"/>
+    <line x1="610" y1="80" x2="610" y2="400"/>
+    <line x1="750" y1="80" x2="750" y2="400"/>
+  </g>
+
+  <!-- messages -->
+  <g stroke="#c0392b" stroke-width="2" marker-end="url(#ta)" font-size="0">
+    <line x1="110" y1="110" x2="280" y2="110"/>
+    <line x1="280" y1="160" x2="110" y2="160"/>
+    <line x1="280" y1="210" x2="450" y2="210"/>
+    <line x1="450" y1="250" x2="610" y2="250"/>
+    <line x1="610" y1="300" x2="110" y2="300"/>
+    <line x1="610" y1="350" x2="750" y2="350"/>
+  </g>
+  <g font-size="12" fill="#1a1a1a">
+    <text x="195" y="104" text-anchor="middle">① INT 拉高(数据就绪)</text>
+    <text x="195" y="154" text-anchor="middle">② 读 INT_STATUS 判定源</text>
+    <text x="365" y="204" text-anchor="middle">③ iio_trigger_poll_nested()</text>
+    <text x="530" y="244" text-anchor="middle">④ 调度底半部</text>
+    <text x="360" y="294" text-anchor="middle">⑤ regmap_bulk_read 14B(+FIFO drain)</text>
+    <text x="680" y="344" text-anchor="middle">⑥ push→buffer</text>
+  </g>
+
+  <!-- activation bars -->
+  <rect x="604" y="255" width="12" height="60" fill="#5b8def" opacity="0.6"/>
+  <rect x="274" y="150" width="12" height="70" fill="#5b8def" opacity="0.6"/>
+
+  <rect x="120" y="380" width="580" height="0" fill="none"/>
+  <text x="410" y="418" text-anchor="middle" font-size="12" fill="#555">中断为 threaded + ONESHOT,底半部内可安全做 I2C 传输;时间戳在顶半部采集以保证精度</text>
+</svg>

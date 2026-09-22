@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="400" viewBox="0 0 820 400" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <marker id="pa" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="398" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">运行时电源管理(runtime PM)状态机</text>
+
+  <!-- states -->
+  <ellipse cx="160" cy="200" rx="95" ry="55" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="160" y="195" text-anchor="middle" font-size="15" font-weight="bold" fill="#1e8449">ACTIVE</text>
+  <text x="160" y="216" text-anchor="middle" font-size="11" fill="#333">正常采样(唤醒)</text>
+
+  <ellipse cx="410" cy="200" rx="95" ry="55" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
+  <text x="410" y="195" text-anchor="middle" font-size="14" font-weight="bold" fill="#b9770e">SUSPENDING</text>
+  <text x="410" y="216" text-anchor="middle" font-size="11" fill="#333">autosuspend 计时中</text>
+
+  <ellipse cx="660" cy="200" rx="95" ry="55" fill="#f0f0f5" stroke="#5d6d9e" stroke-width="2"/>
+  <text x="660" y="195" text-anchor="middle" font-size="15" font-weight="bold" fill="#3a4a7a">SLEEP</text>
+  <text x="660" y="216" text-anchor="middle" font-size="11" fill="#333">PWR_MGMT_1.SLEEP=1</text>
+
+  <!-- transitions -->
+  <line x1="255" y1="185" x2="315" y2="185" stroke="#0b3d91" stroke-width="2" marker-end="url(#pa)"/>
+  <text x="285" y="172" text-anchor="middle" font-size="11" fill="#0b3d91">idle:put_autosuspend</text>
+  <line x1="505" y1="185" x2="565" y2="185" stroke="#0b3d91" stroke-width="2" marker-end="url(#pa)"/>
+  <text x="535" y="172" text-anchor="middle" font-size="11" fill="#0b3d91">超时(2s)</text>
+
+  <line x1="565" y1="225" x2="255" y2="225" stroke="#c0392b" stroke-width="2" marker-end="url(#pa)"/>
+  <text x="410" y="248" text-anchor="middle" font-size="11" fill="#c0392b">resume_and_get()(read_raw / buffer 开启 / 事件)</text>
+
+  <!-- self loop active -->
+  <path d="M120,150 a40,30 0 1 1 80,0" fill="none" stroke="#1e8449" stroke-width="2" marker-end="url(#pa)"/>
+  <text x="160" y="112" text-anchor="middle" font-size="11" fill="#1e8449">get:忙,复位计时</text>
+
+  <rect x="90" y="300" width="640" height="70" rx="6" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="410" y="322" text-anchor="middle" font-size="12" fill="#333">system suspend/resume 经 pm_runtime_force_suspend/resume 与 runtime 状态协同</text>
+  <text x="410" y="344" text-anchor="middle" font-size="12" fill="#333">配合 FIFO 水位与 wake-on-motion,主 CPU 可长时间休眠,仅在必要时被中断唤醒</text>
+  <text x="410" y="362" text-anchor="middle" font-size="11" fill="#555">—— 这是手机/可穿戴 always-on sensor 的核心省电机制</text>
+</svg>

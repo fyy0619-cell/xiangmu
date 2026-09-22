@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="470" viewBox="0 0 820 470" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <marker id="da" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="468" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">两条数据通路</text>
+
+  <!-- Path 1 -->
+  <text x="210" y="66" text-anchor="middle" font-size="15" font-weight="bold" fill="#1e8449">路径一 · sysfs 单次(direct mode)</text>
+  <g font-size="12" fill="#1a1a1a">
+    <rect x="90" y="80" width="240" height="40" rx="6" fill="#eaf7ea" stroke="#1e8449"/><text x="210" y="105" text-anchor="middle">cat in_accel_x_raw</text>
+    <rect x="90" y="140" width="240" height="40" rx="6" fill="#eef4ff" stroke="#0b3d91"/><text x="210" y="165" text-anchor="middle">read_raw(RAW) + claim_direct_mode</text>
+    <rect x="90" y="200" width="240" height="40" rx="6" fill="#eef4ff" stroke="#0b3d91"/><text x="210" y="225" text-anchor="middle">pm_runtime_resume_and_get()</text>
+    <rect x="90" y="260" width="240" height="40" rx="6" fill="#f9e79f" stroke="#b9770e"/><text x="210" y="285" text-anchor="middle">regmap_bulk_read(16bit BE)</text>
+    <rect x="90" y="320" width="240" height="40" rx="6" fill="#fff6ea" stroke="#b9770e"/><text x="210" y="345" text-anchor="middle">换算 SI 值返回用户</text>
+  </g>
+  <g stroke="#0b3d91" stroke-width="2" marker-end="url(#da)">
+    <line x1="210" y1="120" x2="210" y2="140"/>
+    <line x1="210" y1="180" x2="210" y2="200"/>
+    <line x1="210" y1="240" x2="210" y2="260"/>
+    <line x1="210" y1="300" x2="210" y2="320"/>
+  </g>
+
+  <!-- Path 2 -->
+  <text x="610" y="66" text-anchor="middle" font-size="15" font-weight="bold" fill="#c0392b">路径二 · 缓冲流式(triggered buffer)</text>
+  <g font-size="12" fill="#1a1a1a">
+    <rect x="490" y="80" width="240" height="40" rx="6" fill="#eaf7ea" stroke="#1e8449"/><text x="610" y="98" text-anchor="middle">选通道 scan_elements/*_en</text><text x="610" y="114" text-anchor="middle">buffer/enable=1</text>
+    <rect x="490" y="140" width="240" height="40" rx="6" fill="#fff6ea" stroke="#b9770e"/><text x="610" y="165" text-anchor="middle">DRDY / FIFO 中断(GPIO IRQ)</text>
+    <rect x="490" y="200" width="240" height="40" rx="6" fill="#eef4ff" stroke="#0b3d91"/><text x="610" y="225" text-anchor="middle">iio_trigger_poll_nested()</text>
+    <rect x="490" y="260" width="240" height="40" rx="6" fill="#eef4ff" stroke="#0b3d91"/><text x="610" y="278" text-anchor="middle">pollfunc:单帧读 / FIFO 批量 drain</text><text x="610" y="294" text-anchor="middle">push_to_buffers_with_timestamp</text>
+    <rect x="490" y="320" width="240" height="40" rx="6" fill="#eaf7ea" stroke="#1e8449"/><text x="610" y="345" text-anchor="middle">用户 read(/dev/iio:deviceN)</text>
+  </g>
+  <g stroke="#0b3d91" stroke-width="2" marker-end="url(#da)">
+    <line x1="610" y1="120" x2="610" y2="140"/>
+    <line x1="610" y1="180" x2="610" y2="200"/>
+    <line x1="610" y1="240" x2="610" y2="260"/>
+    <line x1="610" y1="300" x2="610" y2="320"/>
+  </g>
+
+  <rect x="120" y="385" width="580" height="66" rx="6" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="410" y="408" text-anchor="middle" font-size="12" fill="#333">两路通过 claim_direct_mode 互斥:缓冲采集期间拒绝 sysfs 单次读,避免寄存器竞争</text>
+  <text x="410" y="430" text-anchor="middle" font-size="12" fill="#333">scan_mask 决定搬运哪些通道 —— 对应 V4L2 协商 format 后"按需搬运有效数据"的思想</text>
+</svg>

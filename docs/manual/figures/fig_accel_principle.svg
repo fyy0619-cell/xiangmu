@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="430" viewBox="0 0 820 430" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#c0392b"/>
+    </marker>
+    <marker id="ab" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="428" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="410" y="34" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">电容式 MEMS 加速度计工作原理</text>
+
+  <!-- anchors -->
+  <rect x="60" y="150" width="40" height="130" fill="#34495e"/>
+  <rect x="720" y="150" width="40" height="130" fill="#34495e"/>
+  <text x="80" y="300" text-anchor="middle" font-size="13" fill="#333">锚点</text>
+  <text x="740" y="300" text-anchor="middle" font-size="13" fill="#333">锚点</text>
+
+  <!-- left spring -->
+  <polyline points="100,215 120,195 140,235 160,195 180,235 200,215" fill="none" stroke="#2c3e50" stroke-width="3"/>
+  <!-- right spring -->
+  <polyline points="620,215 640,195 660,235 680,195 700,235 720,215" fill="none" stroke="#2c3e50" stroke-width="3"/>
+  <text x="150" y="180" text-anchor="middle" font-size="13" fill="#333">弹簧 k</text>
+  <text x="670" y="180" text-anchor="middle" font-size="13" fill="#333">弹簧 k</text>
+
+  <!-- proof mass -->
+  <rect x="330" y="150" width="160" height="130" rx="6" fill="#5b8def" stroke="#0b3d91" stroke-width="2"/>
+  <text x="410" y="205" text-anchor="middle" font-size="16" font-weight="bold" fill="#fff">检验质量 m</text>
+  <text x="410" y="228" text-anchor="middle" font-size="12" fill="#eaf0ff">(可动电极)</text>
+
+  <!-- moving fingers -->
+  <g stroke="#0b3d91" stroke-width="2" fill="#8fb4ff">
+    <rect x="300" y="175" width="30" height="8"/>
+    <rect x="300" y="215" width="30" height="8"/>
+    <rect x="300" y="255" width="30" height="8"/>
+    <rect x="490" y="175" width="30" height="8"/>
+    <rect x="490" y="215" width="30" height="8"/>
+    <rect x="490" y="255" width="30" height="8"/>
+  </g>
+  <!-- fixed fingers -->
+  <g stroke="#7f8c8d" stroke-width="2" fill="#cfd6da">
+    <rect x="270" y="190" width="30" height="8"/>
+    <rect x="270" y="235" width="30" height="8"/>
+    <rect x="520" y="190" width="30" height="8"/>
+    <rect x="520" y="235" width="30" height="8"/>
+  </g>
+  <text x="250" y="150" font-size="12" fill="#333">固定电极 → 差分电容 C1,C2</text>
+
+  <!-- acceleration arrow -->
+  <line x1="410" y1="330" x2="560" y2="330" stroke="#c0392b" stroke-width="4" marker-end="url(#ah)"/>
+  <text x="485" y="322" text-anchor="middle" font-size="15" fill="#c0392b" font-weight="bold">加速度 a</text>
+  <!-- displacement -->
+  <line x1="410" y1="305" x2="470" y2="305" stroke="#0b3d91" stroke-width="2" marker-end="url(#ab)"/>
+  <text x="440" y="298" text-anchor="middle" font-size="12" fill="#0b3d91">位移 x</text>
+
+  <!-- formulas -->
+  <rect x="120" y="360" width="580" height="52" rx="6" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="410" y="382" text-anchor="middle" font-size="14" fill="#1a1a1a">受力 F = m·a  ⟹  位移 x = m·a / k  ⟹  差分电容 ΔC = C1 − C2 ∝ x ∝ a</text>
+  <text x="410" y="402" text-anchor="middle" font-size="12" fill="#555">电容变化经 C-V 转换与 ADC 量化,得到 16 位有符号原始值(raw)</text>
+</svg>

@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="470" viewBox="0 0 820 470" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <rect x="1" y="1" width="818" height="468" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">硬件连接图:STM32MP157 ↔ I2C ↔ MPU-6050</text>
+
+  <!-- SoC block -->
+  <rect x="50" y="90" width="250" height="300" rx="10" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="175" y="118" text-anchor="middle" font-size="16" font-weight="bold" fill="#0b3d91">STM32MP157(Cortex-A7)</text>
+  <text x="175" y="140" text-anchor="middle" font-size="12" fill="#555">运行 Linux · IIO 驱动</text>
+  <!-- SoC pins -->
+  <g font-size="13" fill="#1a1a1a">
+    <rect x="250" y="170" width="50" height="26" fill="#5b8def"/><text x="275" y="188" text-anchor="middle" fill="#fff">SCL</text>
+    <rect x="250" y="210" width="50" height="26" fill="#5b8def"/><text x="275" y="228" text-anchor="middle" fill="#fff">SDA</text>
+    <rect x="250" y="250" width="50" height="26" fill="#8e44ad"/><text x="275" y="268" text-anchor="middle" fill="#fff">GPIO</text>
+    <rect x="250" y="320" width="50" height="26" fill="#c0392b"/><text x="275" y="338" text-anchor="middle" fill="#fff">3V3</text>
+    <rect x="250" y="352" width="50" height="26" fill="#2c3e50"/><text x="275" y="370" text-anchor="middle" fill="#fff">GND</text>
+  </g>
+  <text x="175" y="200" text-anchor="middle" font-size="12" fill="#555">I2C5 控制器</text>
+  <text x="205" y="268" text-anchor="end" font-size="11" fill="#8e44ad">PA5(中断)</text>
+
+  <!-- MPU block -->
+  <rect x="520" y="90" width="250" height="300" rx="10" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
+  <text x="645" y="118" text-anchor="middle" font-size="16" font-weight="bold" fill="#b9770e">MPU-6050(0x68)</text>
+  <text x="645" y="140" text-anchor="middle" font-size="12" fill="#555">加速度+陀螺+温度</text>
+  <g font-size="13" fill="#1a1a1a">
+    <rect x="520" y="170" width="50" height="26" fill="#5b8def"/><text x="545" y="188" text-anchor="middle" fill="#fff">SCL</text>
+    <rect x="520" y="210" width="50" height="26" fill="#5b8def"/><text x="545" y="228" text-anchor="middle" fill="#fff">SDA</text>
+    <rect x="520" y="250" width="50" height="26" fill="#8e44ad"/><text x="545" y="268" text-anchor="middle" fill="#fff">INT</text>
+    <rect x="520" y="290" width="50" height="26" fill="#7f8c8d"/><text x="545" y="308" text-anchor="middle" fill="#fff">AD0</text>
+    <rect x="520" y="320" width="50" height="26" fill="#c0392b"/><text x="545" y="338" text-anchor="middle" fill="#fff">VCC</text>
+    <rect x="520" y="352" width="50" height="26" fill="#2c3e50"/><text x="545" y="370" text-anchor="middle" fill="#fff">GND</text>
+  </g>
+
+  <!-- wires -->
+  <line x1="300" y1="183" x2="520" y2="183" stroke="#5b8def" stroke-width="3"/>
+  <line x1="300" y1="223" x2="520" y2="223" stroke="#5b8def" stroke-width="3"/>
+  <line x1="300" y1="263" x2="520" y2="263" stroke="#8e44ad" stroke-width="3"/>
+  <line x1="300" y1="333" x2="520" y2="333" stroke="#c0392b" stroke-width="3"/>
+  <line x1="300" y1="365" x2="520" y2="365" stroke="#2c3e50" stroke-width="3"/>
+
+  <!-- pull-ups -->
+  <line x1="400" y1="183" x2="400" y2="150" stroke="#c0392b" stroke-width="2"/>
+  <line x1="430" y1="223" x2="430" y2="150" stroke="#c0392b" stroke-width="2"/>
+  <rect x="392" y="120" width="16" height="30" fill="#f9e79f" stroke="#b9770e"/>
+  <rect x="422" y="120" width="16" height="30" fill="#f9e79f" stroke="#b9770e"/>
+  <line x1="392" y1="120" x2="438" y2="120" stroke="#c0392b" stroke-width="2"/>
+  <text x="415" y="112" text-anchor="middle" font-size="11" fill="#b9770e">4.7kΩ 上拉→3V3</text>
+
+  <!-- AD0 to GND note -->
+  <line x1="545" y1="316" x2="545" y2="352" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="645" y="308" text-anchor="middle" font-size="11" fill="#7f8c8d">AD0→GND ⇒ 地址 0x68</text>
+
+  <!-- captions -->
+  <g font-size="12" fill="#333">
+    <text x="410" y="178" text-anchor="middle">SCL(时钟)</text>
+    <text x="410" y="218" text-anchor="middle">SDA(数据)</text>
+    <text x="410" y="258" text-anchor="middle" fill="#8e44ad">INT→GPIO(DRDY/FIFO/运动中断)</text>
+    <text x="410" y="328" text-anchor="middle" fill="#c0392b">3.3V 供电</text>
+    <text x="410" y="360" text-anchor="middle" fill="#2c3e50">共地 GND</text>
+  </g>
+
+  <rect x="120" y="410" width="580" height="44" rx="6" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="410" y="428" text-anchor="middle" font-size="12" fill="#333">I2C 为漏极开路总线,SCL/SDA 需外部上拉;INT 经 GPIO 触发线程化中断,驱动数据流与事件</text>
+  <text x="410" y="446" text-anchor="middle" font-size="11" fill="#555">联调:板↔Ubuntu VM 网口直连 TFTP/NFS 加载 .ko;串口 CH340 @115200 观察 dmesg</text>
+</svg>
