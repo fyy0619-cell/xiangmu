@@ -1,0 +1,24 @@
+# Kernel module build artifacts
+*.o
+*.o.*
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.symvers
+*.order
+.*.cmd
+.tmp_versions/
+modules.builtin*
+Module.markers
+
+# Userspace test binaries
+test/read_raw
+test/stream_buffer
+test/mpu6050-logger
+tools/mpu6050-logger
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store

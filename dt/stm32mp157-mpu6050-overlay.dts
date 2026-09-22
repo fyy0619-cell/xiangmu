@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Device-tree overlay: MPU-6050 on STM32MP157 (100ASK board).
+ *
+ * Adjust the I2C controller phandle (&i2c5 here), the AD0 address bit and
+ * the GPIO wired to the sensor INT pin to match your wiring, then either
+ * apply as an overlay or fold the mpu6050@68 node into the board .dts.
+ *
+ *   dtc -@ -I dts -O dtb -o mpu6050.dtbo dt/stm32mp157-mpu6050-overlay.dts
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/gpio/gpio.h>
+
+&i2c5 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	clock-frequency = <400000>;
+
+	mpu6050: imu@68 {
+		compatible = "invensense,mpu6050";
+		reg = <0x68>;
+		/* INT -> PA5; change to the pin you actually solder to */
+		interrupt-parent = <&gpioa>;
+		interrupts = <5 IRQ_TYPE_EDGE_RISING>;
+		vdd-supply = <&v3v3>;
+		vddio-supply = <&v3v3>;
+	};
+};

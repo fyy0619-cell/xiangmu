@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: GPL-2.0-only
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  module:
+    name: Build kernel module (Linux ${{ matrix.kver }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kver: ["6.6.52", "6.1.110"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libelf-dev \
+            libssl-dev wget xz-utils
+
+      - name: Fetch and prepare kernel ${{ matrix.kver }}
+        run: |
+          MAJOR=$(echo ${{ matrix.kver }} | cut -d. -f1)
+          wget -q https://cdn.kernel.org/pub/linux/kernel/v${MAJOR}.x/linux-${{ matrix.kver }}.tar.xz
+          tar xf linux-${{ matrix.kver }}.tar.xz
+          cd linux-${{ matrix.kver }}
+          make -j$(nproc) defconfig
+          ./scripts/config -e CONFIG_I2C -e CONFIG_REGMAP_I2C \
+            -e CONFIG_IIO -e CONFIG_IIO_BUFFER \
+            -e CONFIG_IIO_TRIGGER -e CONFIG_IIO_TRIGGERED_BUFFER
+          make -j$(nproc) olddefconfig
+          make -j$(nproc) modules_prepare
+
+      - name: Build out-of-tree module
+        run: |
+          make -C drivers/iio/imu/mpu6050 \
+            KDIR=$PWD/linux-${{ matrix.kver }}
+          ls -l drivers/iio/imu/mpu6050/*.ko
+
+  checkpatch:
+    name: checkpatch style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run checkpatch
+        run: |
+          wget -q https://raw.githubusercontent.com/torvalds/linux/master/scripts/checkpatch.pl
+          wget -q -O spelling.txt https://raw.githubusercontent.com/torvalds/linux/master/scripts/spelling.txt
+          chmod +x checkpatch.pl
+          ret=0
+          for f in drivers/iio/imu/mpu6050/*.c drivers/iio/imu/mpu6050/*.h; do
+            ./checkpatch.pl --no-tree --terse --file "$f" || ret=1
+          done
+          exit $ret
+        continue-on-error: true
+
+  userspace:
+    name: Build userspace tools
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build test programs
+        run: |
+          gcc -O2 -Wall -Wextra -o /tmp/read_raw test/read_raw.c -lm
+          gcc -O2 -Wall -Wextra -o /tmp/stream_buffer test/stream_buffer.c
+          sh -n test/smoke_test.sh

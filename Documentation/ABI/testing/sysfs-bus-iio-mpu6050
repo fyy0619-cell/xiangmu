@@ -1,0 +1,53 @@
+What:		/sys/bus/iio/devices/iio:deviceX/in_accel_self_test
+What:		/sys/bus/iio/devices/iio:deviceX/in_anglvel_self_test
+KernelVersion:	6.1
+Contact:	fyy0619-cell <fyy0619-cell@users.noreply.github.com>
+Description:
+		Read-only. Triggers the on-chip factory self-test actuators for
+		the accelerometer or gyroscope, measures the self-test response
+		(actuator enabled minus disabled) and reports the result as:
+
+		    pass x=1 y=1 z=1
+
+		"pass" is emitted only when all three axes fall inside the
+		datasheet self-test-response window; otherwise "fail" is shown
+		with the per-axis pass flags. Reading is only permitted while
+		the buffer is disabled (direct mode).
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_accel_scale_available
+What:		/sys/bus/iio/devices/iio:deviceX/in_anglvel_scale_available
+KernelVersion:	6.1
+Contact:	fyy0619-cell <fyy0619-cell@users.noreply.github.com>
+Description:
+		Read-only. Space-separated list of supported scales (SI units
+		per LSB) corresponding to the four hardware full-scale ranges
+		(accel +/-2/4/8/16 g, gyro +/-250/500/1000/2000 dps). Writing
+		one of these values to in_accel_scale / in_anglvel_scale
+		selects the matching range.
+
+What:		/sys/bus/iio/devices/iio:deviceX/sampling_frequency_available
+KernelVersion:	6.1
+Contact:	fyy0619-cell <fyy0619-cell@users.noreply.github.com>
+Description:
+		Read-only. Supported output data rates in Hz
+		(10 25 50 100 200 500 1000), programmed through SMPLRT_DIV.
+
+What:		/sys/bus/iio/devices/iio:deviceX/buffer/hwfifo_watermark
+KernelVersion:	6.1
+Contact:	fyy0619-cell <fyy0619-cell@users.noreply.github.com>
+Description:
+		Number of samples to batch in the on-chip 1 KiB FIFO before an
+		interrupt drains them to the IIO buffer. A watermark of 0 or 1
+		selects one-interrupt-per-sample data-ready mode; larger values
+		reduce interrupt and wakeup load at the cost of latency.
+
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_accel_mag_rising_en
+What:		/sys/bus/iio/devices/iio:deviceX/events/in_accel_mag_rising_value
+KernelVersion:	6.1
+Contact:	fyy0619-cell <fyy0619-cell@users.noreply.github.com>
+Description:
+		Motion-detection (wake-on-movement) event. Writing 1 to _en
+		arms the accelerometer motion interrupt; _value sets the
+		threshold in raw MOT_THR counts (LSB ~= 32 mg, range 0..255).
+		A rising magnitude event is pushed to the event FIFO whenever
+		acceleration exceeds the threshold.
