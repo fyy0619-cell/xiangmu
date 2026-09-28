@@ -12,6 +12,7 @@
  * Copyright (C) 2026 fyy0619-cell
  */
 #include <linux/delay.h>
+#include <linux/device.h>
 
 #include <linux/iio/sysfs.h>
 

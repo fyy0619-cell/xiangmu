@@ -33,7 +33,8 @@ jobs:
           make -j$(nproc) defconfig
           ./scripts/config -e CONFIG_I2C -e CONFIG_REGMAP_I2C \
             -e CONFIG_IIO -e CONFIG_IIO_BUFFER \
-            -e CONFIG_IIO_TRIGGER -e CONFIG_IIO_TRIGGERED_BUFFER
+            -e CONFIG_IIO_TRIGGER -e CONFIG_IIO_TRIGGERED_BUFFER \
+            -d CONFIG_WERROR
           make -j$(nproc) olddefconfig
           make -j$(nproc) modules_prepare
 
