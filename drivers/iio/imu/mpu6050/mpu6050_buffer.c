@@ -14,6 +14,7 @@
  */
 #include <linux/interrupt.h>
 #include <linux/pm_runtime.h>
+#include <linux/version.h>
 
 #include <linux/iio/buffer.h>
 #include <linux/iio/events.h>
@@ -189,7 +190,12 @@ static irqreturn_t mpu6050_irq_thread(int irq, void *private)
 		return IRQ_NONE;
 
 	if (status & (MPU6050_INT_DATA_RDY | MPU6050_INT_FIFO_OFLOW))
+		/* renamed from iio_trigger_poll_chained() in v6.5 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 5, 0)
+		iio_trigger_poll_chained(st->trig);
+#else
 		iio_trigger_poll_nested(st->trig);
+#endif
 
 	if (status & MPU6050_INT_MOTION)
 		iio_push_event(indio_dev,
