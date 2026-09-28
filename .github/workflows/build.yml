@@ -39,9 +39,13 @@ jobs:
           make -j$(nproc) modules_prepare
 
       - name: Build out-of-tree module
+        # KBUILD_MODPOST_WARN=1: the kernel is only modules_prepare'd (no full
+        # vmlinux), so Module.symvers lacks exported symbols; downgrade modpost
+        # "undefined symbol" to a warning. This is a compile-only gate.
         run: |
           make -C drivers/iio/imu/mpu6050 \
-            KDIR=$PWD/linux-${{ matrix.kver }}
+            KDIR=$PWD/linux-${{ matrix.kver }} \
+            KBUILD_MODPOST_WARN=1
           ls -l drivers/iio/imu/mpu6050/*.ko
 
   checkpatch:
