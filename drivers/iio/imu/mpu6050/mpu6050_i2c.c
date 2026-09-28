@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/version.h>
 
 #include "mpu6050.h"
 
@@ -50,7 +51,12 @@ static struct i2c_driver mpu6050_i2c_driver = {
 		.of_match_table = mpu6050_of_match,
 		.pm = &mpu6050_pm_ops,
 	},
+	/* .probe became single-argument (was .probe_new) in v6.6 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+	.probe_new = mpu6050_i2c_probe,
+#else
 	.probe = mpu6050_i2c_probe,
+#endif
 	.id_table = mpu6050_i2c_id,
 };
 module_i2c_driver(mpu6050_i2c_driver);
