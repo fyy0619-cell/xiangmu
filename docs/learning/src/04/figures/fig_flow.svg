@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="560" viewBox="0 0 820 560" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="818" height="558" fill="#fff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">从零手写 MPU-6050 IIO 驱动 · 步骤流程</text>
+
+  <g font-size="12">
+    <rect x="230" y="54" width="360" height="42" rx="8" fill="#f0f0f5" stroke="#5d6d9e"/><text x="410" y="74" text-anchor="middle" font-weight="bold">步骤 1 · 最小内核模块(hello)</text><text x="410" y="90" text-anchor="middle" fill="#555">验证"编译→加载→dmesg"工具链</text>
+
+    <rect x="230" y="112" width="360" height="42" rx="8" fill="#eef4ff" stroke="#0b3d91"/><text x="410" y="132" text-anchor="middle" font-weight="bold" fill="#0b3d91">步骤 2 · i2c 驱动骨架</text><text x="410" y="148" text-anchor="middle" fill="#555">匹配表 + probe/remove + i2c_driver</text>
+
+    <rect x="230" y="170" width="360" height="42" rx="8" fill="#fff6ea" stroke="#b9770e"/><text x="410" y="190" text-anchor="middle" font-weight="bold" fill="#b9770e">步骤 3 · i2c-stub 造假设备</text><text x="410" y="206" text-anchor="middle" fill="#555">new_device 触发 probe(待命→匹配→probe)</text>
+
+    <rect x="230" y="228" width="360" height="42" rx="8" fill="#eef4ff" stroke="#0b3d91"/><text x="410" y="248" text-anchor="middle" font-weight="bold" fill="#0b3d91">步骤 4 · regmap + 读 WHO_AM_I</text><text x="410" y="264" text-anchor="middle" fill="#555">建通道 + 确认芯片身份(0x68)</text>
+
+    <rect x="230" y="286" width="360" height="42" rx="8" fill="#eef4ff" stroke="#0b3d91"/><text x="410" y="306" text-anchor="middle" font-weight="bold" fill="#0b3d91">步骤 5 · 唤醒 + 注册 IIO 设备</text><text x="410" y="322" text-anchor="middle" fill="#555">/sys/bus/iio/devices/iio:device0 出现</text>
+
+    <rect x="230" y="344" width="360" height="42" rx="8" fill="#eaf7ea" stroke="#1e8449"/><text x="410" y="364" text-anchor="middle" font-weight="bold" fill="#1e8449">步骤 6 · 通道 + read_raw</text><text x="410" y="380" text-anchor="middle" fill="#555">cat in_accel_x_raw 读出原始值</text>
+
+    <rect x="230" y="402" width="360" height="42" rx="8" fill="#eaf7ea" stroke="#1e8449"/><text x="410" y="422" text-anchor="middle" font-weight="bold" fill="#1e8449">步骤 7 · 加 scale</text><text x="410" y="438" text-anchor="middle" fill="#555">raw × scale = 真实加速度(m/s²)</text>
+
+    <rect x="230" y="470" width="360" height="42" rx="8" fill="#0b3d91"/><text x="410" y="490" text-anchor="middle" font-weight="bold" fill="#fff">一个能用的 IIO 传感器驱动</text><text x="410" y="506" text-anchor="middle" fill="#cdd8ee">用户 cat 文件即得数据</text>
+  </g>
+
+  <g stroke="#0b3d91" stroke-width="2" marker-end="url(#a)">
+    <line x1="410" y1="96" x2="410" y2="112"/>
+    <line x1="410" y1="154" x2="410" y2="170"/>
+    <line x1="410" y1="212" x2="410" y2="228"/>
+    <line x1="410" y1="270" x2="410" y2="286"/>
+    <line x1="410" y1="328" x2="410" y2="344"/>
+    <line x1="410" y1="386" x2="410" y2="402"/>
+    <line x1="410" y1="444" x2="410" y2="470"/>
+  </g>
+
+  <text x="150" y="300" text-anchor="middle" font-size="11" fill="#777" transform="rotate(-90 150 300)">每步:改代码 → 标准编译加载循环 → 验证</text>
+</svg>

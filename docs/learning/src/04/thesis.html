@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MPU-6050 IIO 驱动 · 从零手写操作手册</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.7; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:6px 0; text-align:justify; }
+  li { margin:3px 0; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.5pt; line-height:1.4; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:70%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .why { border-left:4px solid #1e8449; background:#eefaf1; margin:8px 0; padding:6px 12px; color:#14502b; font-size:10pt; }
+  .exp { border-left:4px solid #b9770e; background:#fff8ec; margin:8px 0; padding:6px 12px; color:#6a4a10; font-size:10pt; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">MPU-6050 IIO 驱动<br>从零手写操作手册</div>
+  <div class="sub">在 Ubuntu(VM)上用 i2c-stub 模拟,无需真硬件</div>
+  <div class="sub" style="margin-top:80px;font-size:12pt;">配套仓库:github.com/fyy0619-cell/xiangmu　·　2026 年 9 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>0　总体思路与环境</h2>
+<p>本手册带你在 <b>Ubuntu 虚拟机</b>上,从一个最小内核模块出发,一步步长成一个<b>能被 <code>cat</code> 出数据的 IIO 加速度传感器驱动</b>。全程用 <b>i2c-stub 模拟一颗假 MPU6050</b>,不需要真硬件。核心方法:<b>骨架优先 → 增量填肉 → 每加一小块就编译验证</b>(图 1)。</p>
+<figure><img src="figures/fig_flow.png" alt="步骤流程"><figcaption>图 1　从零手写的步骤流程</figcaption></figure>
+<h3>0.1 前置环境(一次性检查)</h3>
+<pre>uname -r                                   # 内核版本(本手册为 5.4)
+gcc --version | head -1                     # 需要 gcc
+ls /lib/modules/$(uname -r)/build           # 需要内核头文件
+modinfo i2c-stub >/dev/null && echo ok      # 需要 i2c-stub</pre>
+<h3>0.2 标准"编译加载循环"(每次改完代码都走这套)</h3>
+<pre>make                       # 1) 编译出 .ko
+sudo make install          # 2) 装到 /lib/modules/.../extra/
+sudo depmod -a             # 3) 重建依赖库
+sudo modprobe mpu6050_iio  # 4) 加载
+dmesg | tail               #    看日志
+sudo modprobe -r mpu6050_iio   # 卸载</pre>
+<div class="exp">提示:凡动 <code>/lib/modules</code> 的命令(install/depmod/modprobe)都要 <code>sudo</code>;<code>make</code> 本身不用。改代码后若用 modprobe,务必重跑 install+depmod,否则加载的是旧版本。</div>
+
+<div class="pagebreak"></div>
+<h2>1　最小内核模块(验证工具链)</h2>
+<div class="why">目的:先确认"编译→加载→dmesg→卸载"整条链路在这台机器上能通。</div>
+<p><b>Makefile</b>(缩进两行是 TAB):</p>
+<pre>KERNELDIR := /lib/modules/$(shell uname -r)/build
+CURRENT_PATH := $(shell pwd)
+obj-m := hello.o
+build: kernel_modules
+kernel_modules:
+	$(MAKE) -C $(KERNELDIR) M=$(CURRENT_PATH) modules
+install:
+	$(MAKE) -C $(KERNELDIR) M=$(CURRENT_PATH) modules_install
+clean:
+	$(MAKE) -C $(KERNELDIR) M=$(CURRENT_PATH) clean</pre>
+<p><b>hello.c</b>:</p>
+<pre>#include &lt;linux/module.h&gt;
+#include &lt;linux/init.h&gt;
+static int __init hello_init(void){ pr_info("hello: loaded\n"); return 0; }
+static void __exit hello_exit(void){ pr_info("hello: unloaded\n"); }
+module_init(hello_init);
+module_exit(hello_exit);
+MODULE_LICENSE("GPL");</pre>
+<p><b>验证</b>:走标准循环,<code>dmesg</code> 应出现 <code>hello: loaded</code>。</p>
+<div class="exp">原理:<code>module_init/exit</code> 注册加载/卸载回调;<code>pr_info</code> 打到内核日志(<code>dmesg</code> 看)。加载时的 <code>tainting kernel</code> 是未签名模块的正常提示。</div>
+
+<div class="pagebreak"></div>
+<h2>2　i2c 驱动骨架(让 probe 存在)</h2>
+<div class="why">目的:把模块变成一个 i2c 驱动,声明"我认得名叫 mpu6050 的设备",并实现一个只打印的 probe。</div>
+<p>改 Makefile 的 <code>obj-m := mpu6050_iio.o</code>,写 <code>mpu6050_iio.c</code>(骨架):</p>
+<pre>#include &lt;linux/module.h&gt;
+#include &lt;linux/i2c.h&gt;
+#include &lt;linux/mod_devicetable.h&gt;
+
+static int mpu6050_probe(struct i2c_client *client, const struct i2c_device_id *id)
+{ dev_info(&amp;client-&gt;dev, "probe: matched at 0x%02x\n", client-&gt;addr); return 0; }
+
+static const struct i2c_device_id mpu6050_id[] = { { "mpu6050", 0 }, { } };
+MODULE_DEVICE_TABLE(i2c, mpu6050_id);
+static const struct of_device_id mpu6050_of_match[] = {
+	{ .compatible = "invensense,mpu6050" }, { } };
+MODULE_DEVICE_TABLE(of, mpu6050_of_match);
+
+static struct i2c_driver mpu6050_driver = {
+	.driver = { .name = "mpu6050_iio", .of_match_table = mpu6050_of_match },
+	.probe = mpu6050_probe, .id_table = mpu6050_id,
+};
+module_i2c_driver(mpu6050_driver);
+MODULE_LICENSE("GPL");</pre>
+<div class="exp">原理:<code>module_i2c_driver</code> 注册驱动后它"待命";<code>id_table</code>/<code>of_match</code> 是"我认得哪些设备"的表。此时加载驱动,probe 还不会被调用——因为总线上还没有匹配的设备(见步骤 3)。</div>
+
+<div class="pagebreak"></div>
+<h2>3　i2c-stub 造假设备,触发 probe</h2>
+<div class="why">目的:在没有真硬件时,造一颗假 MPU6050,让内核匹配并调用你的 probe。</div>
+<pre># 加载驱动(走标准循环),然后:
+sudo modprobe i2c-stub chip_addr=0x68          # 造假总线+假芯片(0x68)
+# 找出假总线是 i2c 几号:
+N=$(for d in /sys/class/i2c-adapter/i2c-*; do grep -qi stub "$d/name" &amp;&amp; echo "${d##*i2c-}"; done)
+echo "stub = i2c-$N"
+# 在这条总线上造一个名叫 mpu6050 的设备:
+sudo sh -c "echo mpu6050 0x68 &gt; /sys/bus/i2c/devices/i2c-$N/new_device"
+dmesg | tail -3                                 # 预期:probe: matched ...</pre>
+<div class="exp">原理(关键):驱动=待命;<code>new_device</code>=在总线上造出一个设备(相当于真板子上设备树干的事)。设备名字和 <code>id_table</code> 对上 → 内核<b>自动调 probe</b>。这就是"待命→匹配→probe"。清理:<code>echo 0x68 &gt; .../delete_device</code>。</div>
+
+<div class="pagebreak"></div>
+<h2>4　regmap + 读 WHO_AM_I(认芯片)</h2>
+<div class="why">目的:建立读写芯片寄存器的通道,读 WHO_AM_I(0x75)确认"接的是不是 MPU6050"。</div>
+<p>probe 里新增(需 <code>#include &lt;linux/regmap.h&gt;</code>):</p>
+<pre>static const struct regmap_config mpu6050_regmap_config = {
+	.reg_bits = 8, .val_bits = 8, .max_register = 0x75,
+};
+/* probe 内: */
+struct regmap *regmap = devm_regmap_init_i2c(client, &amp;mpu6050_regmap_config);
+unsigned int whoami;
+regmap_read(regmap, 0x75, &amp;whoami);
+dev_info(&amp;client-&gt;dev, "WHO_AM_I = 0x%02x\n", whoami);</pre>
+<p><b>让假芯片"假装"是真的</b>(装 i2c-tools 后,把假芯片 0x75 寄存器写成 0x68):</p>
+<pre>sudo apt install -y i2c-tools
+sudo i2cset -y 0 0x68 0x75 0x68        # 设备未绑定时写;之后再 new_device
+# 预期:dmesg 出现 WHO_AM_I = 0x68</pre>
+<div class="exp">原理:I2C 外部芯片不在 SoC 地址空间,不能 ioremap,只能通过总线读写寄存器——<code>regmap</code> 就是这个统一通道。WHO_AM_I 是芯片出厂固化的身份码,量产驱动 probe 第一步都读它。注意本机内核 5.4 没有 <code>dev_err_probe</code>(5.9 才有),用普通 <code>dev_err</code>。</div>
+
+<div class="pagebreak"></div>
+<h2>5　唤醒 + 注册 IIO 设备</h2>
+<div class="why">目的:唤醒芯片(默认睡眠),并把它注册进 IIO 子系统,让 /sys/bus/iio/devices/ 下出现设备。</div>
+<p>引入私有数据 + iio_dev(需 <code>#include &lt;linux/iio/iio.h&gt;</code>):</p>
+<pre>struct mpu6050_data { struct regmap *regmap; };
+static const struct iio_info mpu6050_info = { };   /* 暂空 */
+/* probe 内: */
+struct iio_dev *indio_dev = devm_iio_device_alloc(&amp;client-&gt;dev, sizeof(struct mpu6050_data));
+struct mpu6050_data *data = iio_priv(indio_dev);
+data-&gt;regmap = devm_regmap_init_i2c(client, &amp;mpu6050_regmap_config);
+/* ... 读 WHO_AM_I ... */
+regmap_update_bits(data-&gt;regmap, 0x6B, (1&lt;&lt;6), 0);   /* 清 PWR_MGMT_1 的 SLEEP 位 */
+indio_dev-&gt;name = "mpu6050";
+indio_dev-&gt;modes = INDIO_DIRECT_MODE;
+indio_dev-&gt;info = &amp;mpu6050_info;
+devm_iio_device_register(&amp;client-&gt;dev, indio_dev);</pre>
+<p><b>验证</b>:<code>ls /sys/bus/iio/devices/</code> 出现 <code>iio:device0</code>;<code>cat .../iio:device0/name</code> = <code>mpu6050</code>。</p>
+<div class="exp">原理:<code>devm_iio_device_alloc</code> 一次分配"iio 设备 + 你的私有结构",<code>iio_priv()</code> 取私有部分。<code>devm_iio_device_register</code> 就是"开柜台"。<code>devm_</code> 前缀=设备移除时自动释放,不用手写清理。</div>
+
+<div class="pagebreak"></div>
+<h2>6　通道 + read_raw(读出原始值)</h2>
+<div class="why">目的:声明"能测加速度 X/Y/Z",并实现 read_raw,让用户 cat 出原始值。</div>
+<pre>#define MPU6050_REG_ACCEL_XOUT_H 0x3B
+#define MPU6050_ACCEL_CHANNEL(axis, idx) {                    \
+	.type = IIO_ACCEL, .modified = 1, .channel2 = IIO_MOD_##axis, \
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW), .address = idx, }
+static const struct iio_chan_spec mpu6050_channels[] = {
+	MPU6050_ACCEL_CHANNEL(X, 0), MPU6050_ACCEL_CHANNEL(Y, 1), MPU6050_ACCEL_CHANNEL(Z, 2),
+};
+static int mpu6050_read_raw(struct iio_dev *indio_dev,
+	struct iio_chan_spec const *chan, int *val, int *val2, long mask)
+{
+	struct mpu6050_data *data = iio_priv(indio_dev);
+	unsigned int h, l; int reg;
+	if (mask == IIO_CHAN_INFO_RAW) {
+		reg = MPU6050_REG_ACCEL_XOUT_H + chan-&gt;address * 2;
+		regmap_read(data-&gt;regmap, reg, &amp;h);
+		regmap_read(data-&gt;regmap, reg + 1, &amp;l);
+		*val = (s16)((h &lt;&lt; 8) | l);
+		return IIO_VAL_INT;
+	}
+	return -EINVAL;
+}
+/* iio_info 改成: { .read_raw = mpu6050_read_raw }; probe 里加通道: */
+indio_dev-&gt;channels = mpu6050_channels;
+indio_dev-&gt;num_channels = ARRAY_SIZE(mpu6050_channels);</pre>
+<p><b>验证</b>(给假芯片预置 X 加速度后):</p>
+<pre>sudo i2cset -y 0 0x68 0x3b 0x12    # X 高字节
+sudo i2cset -y 0 0x68 0x3c 0x34    # X 低字节 =&gt; 0x1234 = 4660
+cat /sys/bus/iio/devices/iio:device0/in_accel_x_raw    # 预期 4660</pre>
+<div class="exp">原理:定义通道 → IIO 自动生成 <code>in_accel_x_raw</code> 等文件;用户 cat 时内核回调你的 <code>read_raw</code>,你 regmap 读两个寄存器(高/低字节)拼成 16 位有符号数返回。真芯片这些寄存器由硬件实时更新。</div>
+
+<div class="pagebreak"></div>
+<h2>7　加 scale(原始值 → 真实物理量)</h2>
+<div class="why">目的:raw 是芯片计数,不是物理量。加 scale,让用户按"物理量 = raw × scale"得到 m/s²。</div>
+<pre>/* 通道宏加一行,三轴共用一个 in_accel_scale: */
+.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),
+/* read_raw 加一个分支: */
+case IIO_CHAN_INFO_SCALE:
+	*val = 0; *val2 = 598550;          /* ±2g: 9.80665/16384 ≈ 0.000598550 */
+	return IIO_VAL_INT_PLUS_NANO;</pre>
+<p><b>验证</b>:</p>
+<pre>cat .../in_accel_scale    # 0.000598550
+cat .../in_accel_x_raw    # 4660
+# 真实加速度 = 4660 × 0.000598550 ≈ 2.79 m/s²</pre>
+<div class="exp">原理:IIO 约定物理量 = raw × scale(+offset)。<code>info_mask_shared_by_type</code> 表示该属性"同类通道共享"→ 只生成一个 <code>in_accel_scale</code>。<code>IIO_VAL_INT_PLUS_NANO</code> 表示返回值 = val + val2×1e-9。</div>
+
+<div class="pagebreak"></div>
+<h2>附录 A　完整最终代码(accel x/y/z + raw + scale)</h2>
+<pre>// SPDX-License-Identifier: GPL-2.0
+#include &lt;linux/module.h&gt;
+#include &lt;linux/i2c.h&gt;
+#include &lt;linux/mod_devicetable.h&gt;
+#include &lt;linux/regmap.h&gt;
+#include &lt;linux/iio/iio.h&gt;
+
+#define MPU6050_REG_WHO_AM_I     0x75
+#define MPU6050_WHO_AM_I_VAL     0x68
+#define MPU6050_REG_PWR_MGMT_1   0x6B
+#define MPU6050_PWR1_SLEEP       (1 &lt;&lt; 6)
+#define MPU6050_REG_ACCEL_XOUT_H 0x3B
+
+struct mpu6050_data { struct regmap *regmap; };
+
+static const struct regmap_config mpu6050_regmap_config = {
+	.reg_bits = 8, .val_bits = 8, .max_register = 0x75,
+};
+
+#define MPU6050_ACCEL_CHANNEL(axis, idx) {                     \
+	.type = IIO_ACCEL, .modified = 1, .channel2 = IIO_MOD_##axis,   \
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),              \
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),      \
+	.address = idx, }
+
+static const struct iio_chan_spec mpu6050_channels[] = {
+	MPU6050_ACCEL_CHANNEL(X, 0),
+	MPU6050_ACCEL_CHANNEL(Y, 1),
+	MPU6050_ACCEL_CHANNEL(Z, 2),
+};
+
+static int mpu6050_read_raw(struct iio_dev *indio_dev,
+	struct iio_chan_spec const *chan, int *val, int *val2, long mask)
+{
+	struct mpu6050_data *data = iio_priv(indio_dev);
+	unsigned int h, l; int reg, ret;
+	switch (mask) {
+	case IIO_CHAN_INFO_RAW:
+		reg = MPU6050_REG_ACCEL_XOUT_H + chan-&gt;address * 2;
+		ret = regmap_read(data-&gt;regmap, reg, &amp;h);     if (ret) return ret;
+		ret = regmap_read(data-&gt;regmap, reg + 1, &amp;l); if (ret) return ret;
+		*val = (s16)((h &lt;&lt; 8) | l);
+		return IIO_VAL_INT;
+	case IIO_CHAN_INFO_SCALE:
+		*val = 0; *val2 = 598550;
+		return IIO_VAL_INT_PLUS_NANO;
+	default:
+		return -EINVAL;
+	}
+}
+
+static const struct iio_info mpu6050_info = { .read_raw = mpu6050_read_raw };
+
+static int mpu6050_probe(struct i2c_client *client, const struct i2c_device_id *id)
+{
+	struct iio_dev *indio_dev;
+	struct mpu6050_data *data;
+	unsigned int whoami; int ret;
+
+	indio_dev = devm_iio_device_alloc(&amp;client-&gt;dev, sizeof(*data));
+	if (!indio_dev) return -ENOMEM;
+	data = iio_priv(indio_dev);
+
+	data-&gt;regmap = devm_regmap_init_i2c(client, &amp;mpu6050_regmap_config);
+	if (IS_ERR(data-&gt;regmap)) { dev_err(&amp;client-&gt;dev, "regmap init failed\n");
+		return PTR_ERR(data-&gt;regmap); }
+
+	ret = regmap_read(data-&gt;regmap, MPU6050_REG_WHO_AM_I, &amp;whoami);
+	if (ret) return ret;
+	if (whoami == MPU6050_WHO_AM_I_VAL) dev_info(&amp;client-&gt;dev, "MPU-6050 detected!\n");
+	else dev_warn(&amp;client-&gt;dev, "unexpected WHO_AM_I 0x%02x\n", whoami);
+
+	regmap_update_bits(data-&gt;regmap, MPU6050_REG_PWR_MGMT_1, MPU6050_PWR1_SLEEP, 0);
+
+	indio_dev-&gt;name = "mpu6050";
+	indio_dev-&gt;modes = INDIO_DIRECT_MODE;
+	indio_dev-&gt;info = &amp;mpu6050_info;
+	indio_dev-&gt;channels = mpu6050_channels;
+	indio_dev-&gt;num_channels = ARRAY_SIZE(mpu6050_channels);
+	return devm_iio_device_register(&amp;client-&gt;dev, indio_dev);
+}
+
+static const struct i2c_device_id mpu6050_id[] = { { "mpu6050", 0 }, { } };
+MODULE_DEVICE_TABLE(i2c, mpu6050_id);
+static const struct of_device_id mpu6050_of_match[] = {
+	{ .compatible = "invensense,mpu6050" }, { } };
+MODULE_DEVICE_TABLE(of, mpu6050_of_match);
+
+static struct i2c_driver mpu6050_driver = {
+	.driver = { .name = "mpu6050_iio", .of_match_table = mpu6050_of_match },
+	.probe = mpu6050_probe, .id_table = mpu6050_id,
+};
+module_i2c_driver(mpu6050_driver);
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("yyf");
+MODULE_DESCRIPTION("MPU-6050 IIO driver (learning)");</pre>
+
+<h2>附录 B　常见坑</h2>
+<ul>
+  <li>VSCode 满屏红波浪线 = 智能提示找不到内核头文件,<b>不是真错误</b>;以 <code>make</code> 为准。</li>
+  <li><code>missing separator</code> = Makefile 缩进不是 TAB。</li>
+  <li><code>stray '\xxx'</code> = 把中文讲解粘进了 .c;.c 里只能有代码(中文只能在注释里)。</li>
+  <li><code>depmod: Permission denied</code> = 忘了 <code>sudo</code>。</li>
+  <li>改了代码但现象没变 = 用 modprobe 时忘了重跑 <code>make install</code> + <code>depmod -a</code>。</li>
+  <li>probe 没被调用 = 只加载了驱动,没 <code>new_device</code> 造设备。</li>
+  <li><code>dev_err_probe</code> 编不过 = 内核 &lt; 5.9,用普通 <code>dev_err</code>。</li>
+</ul>
+
+<blockquote>本手册为从零手写 IIO 驱动的操作记录,可照着复盘或重做。配套仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
