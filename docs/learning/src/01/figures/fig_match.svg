@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="470" viewBox="0 0 820 470" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="818" height="468" fill="#fff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">Linux 设备-驱动匹配模型(核心)</text>
+
+  <!-- driver side -->
+  <rect x="50" y="70" width="300" height="150" rx="10" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="200" y="96" text-anchor="middle" font-size="15" font-weight="bold" fill="#0b3d91">驱动 driver(你写的代码)</text>
+  <text x="200" y="122" text-anchor="middle" font-size="12" fill="#333">加载后"待命",声明我认哪些设备:</text>
+  <text x="200" y="146" text-anchor="middle" font-size="12" fill="#1a4fa0">• id_table:名字 "mpu6050"</text>
+  <text x="200" y="168" text-anchor="middle" font-size="12" fill="#1a4fa0">• of_match:compatible</text>
+  <text x="200" y="196" text-anchor="middle" font-size="12" fill="#333">带着 probe() / remove() 两个回调</text>
+
+  <!-- device side -->
+  <rect x="470" y="70" width="300" height="150" rx="10" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
+  <text x="620" y="96" text-anchor="middle" font-size="15" font-weight="bold" fill="#b9770e">设备 device(硬件的"描述")</text>
+  <text x="620" y="122" text-anchor="middle" font-size="12" fill="#333">"总线上有个设备,在 0x68,叫 mpu6050"</text>
+  <text x="620" y="150" text-anchor="middle" font-size="12" fill="#333">这份描述从哪来?</text>
+  <text x="620" y="174" text-anchor="middle" font-size="12" fill="#7a5209">• 真板子:设备树(Device Tree)</text>
+  <text x="620" y="196" text-anchor="middle" font-size="12" fill="#7a5209">• VM 学习:i2c-stub + new_device</text>
+
+  <!-- bus -->
+  <rect x="250" y="270" width="320" height="60" rx="10" fill="#e8eef8" stroke="#0b3d91" stroke-width="2"/>
+  <text x="410" y="296" text-anchor="middle" font-size="15" font-weight="bold" fill="#0b3d91">总线 bus(i2c 核心)</text>
+  <text x="410" y="318" text-anchor="middle" font-size="12" fill="#333">拿驱动的"认得表"去比对设备的名字</text>
+
+  <line x1="200" y1="220" x2="330" y2="270" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="620" y1="220" x2="490" y2="270" stroke="#b9770e" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- match -> probe -->
+  <line x1="410" y1="330" x2="410" y2="375" stroke="#1e8449" stroke-width="3" marker-end="url(#a)"/>
+  <rect x="250" y="380" width="320" height="60" rx="10" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="410" y="406" text-anchor="middle" font-size="15" font-weight="bold" fill="#1e8449">名字对上 → 内核自动调用你的 probe()</text>
+  <text x="410" y="428" text-anchor="middle" font-size="12" fill="#333">从此你的驱动"接管"这个设备</text>
+
+  <text x="410" y="360" text-anchor="middle" font-size="12" fill="#1e8449">匹配成功</text>
+</svg>

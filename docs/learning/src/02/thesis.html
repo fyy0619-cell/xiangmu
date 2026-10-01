@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Linux 嵌入式驱动开发 · 入门知识体系</title>
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:11pt; line-height:1.8; color:#1a1a1a; }
+  h1 { font-size:22pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:16pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:4px; margin-top:24px; }
+  h3 { font-size:13pt; color:#123a7a; margin-top:16px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9.5pt; }
+  figure { text-align:center; margin:14px 0; page-break-inside:avoid; }
+  figure img { max-width:94%; border:1px solid #e0e0e0; }
+  figcaption { font-size:10pt; color:#444; margin-top:6px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:10px 0; padding:8px 14px; color:#14502b; }
+  .goal { border-left:4px solid #0b3d91; background:#eef4ff; margin:8px 0; padding:6px 12px; color:#0b3d91; font-size:10.5pt; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:25pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:24px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+  .toc div { margin:5px 0; } .toc .l1 { font-weight:bold; } .toc .l2 { margin-left:2em; color:#333; font-size:10.5pt; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">Linux 嵌入式驱动开发<br>入门知识体系</div>
+  <div class="sub">面向零基础 · 从底层到框架的系统学习路线</div>
+  <div class="sub" style="margin-top:90px;font-size:12pt;">2026 年 9 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>怎么用这份文档</h2>
+<p>这是一份<b>系统的、循序渐进的</b> Linux 驱动开发入门知识地图,按正规的学习顺序组织,和任何具体项目无关。它回答三个问题:<b>要学哪些东西、按什么顺序学、每块的核心是什么。</b>你可以把它当作学习路线和查漏补缺的清单。</p>
+<p>驱动开发不是"背 API",而是一层层建立体系。<b>下层不牢,上层必然一头雾水</b>。所以请按阶段 0 → 7 的顺序,一层扎实了再上一层。每个阶段都给出"学什么 / 为什么重要 / 核心知识点 / 学完能做什么"。</p>
+<figure><img src="figures/fig_roadmap.png" alt="学习路线"><figcaption>图 1　Linux 驱动开发学习路线阶梯</figcaption></figure>
+
+<div class="pagebreak"></div>
+<h2>先建立整体图景</h2>
+<p>学任何一块之前,先在脑子里有这张"从应用程序到硬件"的分层图(图 2)。<b>驱动开发,本质就是学"内核空间"这一层</b>:向上响应应用的系统调用、把数据交给用户;向下访问硬件寄存器。再往上一层,是用"子系统框架"让驱动标准化。</p>
+<figure><img src="figures/fig_layers.png" alt="分层图景"><figcaption>图 2　从应用程序到硬件的分层</figcaption></figure>
+
+<div class="pagebreak"></div>
+<h2 style="border:none;text-align:center;">目　录</h2>
+<div class="toc">
+  <div class="l1">阶段 0　前置基础</div>
+  <div class="l2">Linux 操作 · C 语言重点 · 操作系统概念 · 交叉编译</div>
+  <div class="l1">阶段 1　内核与模块基础</div>
+  <div class="l2">用户态/内核态 · 内核模块 · 构建系统 · 内核日志</div>
+  <div class="l1">阶段 2　字符设备驱动(经典入门主线)</div>
+  <div class="l2">设备号 · cdev · file_operations · 数据拷贝 · 自动建节点</div>
+  <div class="l1">阶段 3　硬件访问与并发同步</div>
+  <div class="l2">地址映射 · 寄存器读写 · 中断 · 定时器 · 锁</div>
+  <div class="l1">阶段 4　Linux 设备驱动模型(进阶核心)</div>
+  <div class="l2">bus/device/driver · platform · 设备树 · probe · devm</div>
+  <div class="l1">阶段 5　总线子系统</div>
+  <div class="l2">I2C · SPI · regmap</div>
+  <div class="l1">阶段 6　框架子系统(专业方向)</div>
+  <div class="l2">input · gpio/pinctrl · IIO · 电源管理</div>
+  <div class="l1">阶段 7　调试与工程能力</div>
+  <div class="l1">附录　推荐资源与练手路径</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>阶段 0　前置基础</h2>
+<p><b>学什么:</b>动手写驱动之前必须具备的底子。缺了它们,后面每一步都会卡。</p>
+<h3>0.1 Linux 基本操作</h3>
+<ul>
+  <li>命令行:文件与目录操作、<code>vim</code>/编辑器、管道与重定向、查看日志。</li>
+  <li>文件系统与权限:<code>root</code> 与普通用户、<code>sudo</code>、文件权限位。</li>
+  <li>软件与内核包:<code>apt</code> 安装工具、内核头文件包。</li>
+</ul>
+<h3>0.2 C 语言重点(驱动几乎全用 C)</h3>
+<ul>
+  <li><b>指针</b>:地址、解引用、指针运算(驱动里到处是指针)。</li>
+  <li><b>结构体</b>:驱动用大量结构体描述设备/驱动/操作集。</li>
+  <li><b>函数指针</b>:回调机制的核心(如 <code>file_operations</code> 里一堆函数指针)。</li>
+  <li>位运算:读写寄存器全靠 <code>&amp; | ~ &lt;&lt; &gt;&gt;</code>。</li>
+  <li>预处理与头文件、<code>static</code>/<code>const</code>、宏。</li>
+</ul>
+<h3>0.3 操作系统概念</h3>
+<ul>
+  <li><b>用户态 vs 内核态</b>:程序权限的两个世界,靠系统调用切换。</li>
+  <li>进程、内存(虚拟地址)、中断的基本概念。</li>
+  <li>并发:多个执行流同时访问同一资源会出问题(为阶段 3 的锁做准备)。</li>
+</ul>
+<h3>0.4 交叉编译概念</h3>
+<ul>
+  <li>为什么要交叉编译:开发机是 x86,目标板是 ARM,架构不同。</li>
+  <li><code>ARCH</code>、<code>CROSS_COMPILE</code>、工具链前缀(如 <code>arm-linux-gnueabihf-</code>)。</li>
+</ul>
+<div class="goal">学完能做什么:能在 Linux 里自如操作、读懂 C 指针/结构体/函数指针、理解用户态与内核态的分界。</div>
+
+<div class="pagebreak"></div>
+<h2>阶段 1　内核与模块基础</h2>
+<p><b>学什么:</b>把代码"塞进内核运行"的机制,以及编译、加载、看日志的完整闭环。</p>
+<h3>1.1 用户态与内核态</h3>
+<p>应用程序运行在"用户态",权限受限;操作系统内核运行在"内核态",能直接访问硬件。二者通过<b>系统调用</b>(如 open/read/write)交互。驱动运行在内核态。</p>
+<h3>1.2 内核模块(LKM)</h3>
+<ul>
+  <li>模块 = 可在运行时动态加载进内核的一段代码(<code>.ko</code>)。</li>
+  <li><code>module_init()</code>/<code>module_exit()</code>:加载/卸载时调用的函数。</li>
+  <li>模块参数、符号导出(<code>EXPORT_SYMBOL</code>)、<code>MODULE_LICENSE</code> 等。</li>
+</ul>
+<h3>1.3 内核构建系统(kbuild)</h3>
+<ul>
+  <li>模块必须用内核的构建系统编,不能用普通 <code>gcc</code>。</li>
+  <li>Makefile 关键:<code>obj-m</code>、<code>KERNELDIR</code>、<code>-C $(KERNELDIR) M=$(PWD) modules</code>。</li>
+</ul>
+<h3>1.4 加载与日志</h3>
+<ul>
+  <li>加载:<code>insmod</code>(按文件)/ <code>modprobe</code>(按名字,自动处理依赖,需 <code>depmod</code>)。</li>
+  <li>日志:<code>printk</code>/<code>pr_info</code>/<code>dev_info</code> → <code>dmesg</code> 查看。</li>
+  <li><code>lsmod</code>、<code>modinfo</code> 查看模块状态与信息。</li>
+</ul>
+<div class="goal">学完能做什么:独立写一个 hello 模块,完成"编译 → 加载 → dmesg 看日志 → 卸载"的完整循环。</div>
+
+<div class="pagebreak"></div>
+<h2>阶段 2　字符设备驱动(经典入门主线)</h2>
+<p><b>学什么:</b>最经典的一类驱动,让用户能通过 <code>/dev/xxx</code> 像读写文件一样操作设备。它把"系统调用如何落到驱动"讲透。</p>
+<h3>2.1 设备号与设备节点</h3>
+<ul>
+  <li>主设备号(哪个驱动)+ 次设备号(同类第几个)。</li>
+  <li><code>/dev/xxx</code> 就是设备节点,用户通过它访问驱动。</li>
+</ul>
+<h3>2.2 注册字符设备</h3>
+<ul>
+  <li>老接口:<code>register_chrdev</code>;新接口:<code>cdev_init</code>/<code>cdev_add</code> + <code>alloc_chrdev_region</code>。</li>
+</ul>
+<h3>2.3 file_operations(核心)</h3>
+<ul>
+  <li>一张函数指针表:<code>open</code>/<code>read</code>/<code>write</code>/<code>release</code>/<code>ioctl</code> 等。</li>
+  <li>用户调 <code>read()</code> → 内核最终调用你 <code>file_operations</code> 里的 <code>read</code>。这就是"系统调用落到驱动"。</li>
+</ul>
+<h3>2.4 用户态/内核态数据拷贝</h3>
+<ul>
+  <li>内核不能直接读写用户内存,必须用 <code>copy_from_user</code>/<code>copy_to_user</code>。</li>
+</ul>
+<h3>2.5 自动创建设备节点</h3>
+<ul>
+  <li><code>class_create</code> + <code>device_create</code>,配合 udev 自动在 <code>/dev</code> 下生成节点(免去手动 mknod)。</li>
+</ul>
+<div class="goal">学完能做什么:写一个能被应用 open/read/write 的字符设备驱动(如控制一个 LED、读一个按键)。</div>
+
+<div class="pagebreak"></div>
+<h2>阶段 3　硬件访问与并发同步</h2>
+<p><b>学什么:</b>驱动怎么真正"碰"硬件,以及多个执行流并发时如何不出错。</p>
+<h3>3.1 地址映射与寄存器读写</h3>
+<ul>
+  <li>物理地址 vs 虚拟地址、MMU;<code>ioremap</code> 把外设寄存器物理地址映射到内核可访问的虚拟地址。</li>
+  <li><code>readl</code>/<code>writel</code> 读写寄存器;位运算配置各个 bit。</li>
+  <li>(注意:只有 <b>SoC 内部外设</b>能这样直接映射;外部 I2C/SPI 芯片要走总线,见阶段 5。)</li>
+</ul>
+<h3>3.2 中断处理</h3>
+<ul>
+  <li>为什么要中断:避免 CPU 空转轮询,硬件有事主动通知。</li>
+  <li><code>request_irq</code> 注册中断;<b>上半部</b>(快、不可睡眠)+ <b>下半部</b>(tasklet/workqueue/线程化中断,可做耗时/可睡眠的活)。</li>
+</ul>
+<h3>3.3 延时与定时器</h3>
+<ul>
+  <li>忙等 <code>udelay</code>/<code>mdelay</code> vs 睡眠 <code>msleep</code>;内核定时器做周期任务。</li>
+</ul>
+<h3>3.4 并发与同步(极重要,面试常考)</h3>
+<ul>
+  <li>竞态从哪来:多核、抢占、中断都会导致并发访问同一数据。</li>
+  <li>工具:<b>原子操作</b>、<b>自旋锁</b>(短临界区、不可睡眠、可用于中断)、<b>信号量/互斥锁</b>(长临界区、可睡眠)。</li>
+  <li>选择原则:临界区短且不睡 → 自旋锁;可能睡眠(如 I2C 传输)→ 互斥锁。</li>
+</ul>
+<div class="goal">学完能做什么:能操作硬件寄存器、写中断处理、并用锁保护共享数据不出竞态。</div>
+
+<div class="pagebreak"></div>
+<h2>阶段 4　Linux 设备驱动模型(进阶核心)</h2>
+<p><b>学什么:</b>现代内核组织驱动的标准方式。这是从"入门"迈向"专业"的分水岭,也是大厂面试的重点。</p>
+<h3>4.1 bus / device / driver 模型</h3>
+<ul>
+  <li>内核把<b>驱动(代码)</b>和<b>设备(硬件描述)</b>分开,由<b>总线</b>撮合。</li>
+  <li>驱动注册后"待命",声明认得哪些设备;总线上出现匹配设备 → 内核自动调 <code>probe()</code>。</li>
+  <li><code>sysfs</code>/<code>kobject</code>:设备/驱动在 <code>/sys</code> 下的呈现。</li>
+</ul>
+<h3>4.2 platform 总线</h3>
+<ul>
+  <li>SoC 内部、非标准总线的设备用 <code>platform_driver</code> + <code>platform_device</code>。</li>
+  <li>这是"从字符设备手动式"过渡到"probe 模型式"的第一站。</li>
+</ul>
+<h3>4.3 设备树(Device Tree)</h3>
+<ul>
+  <li>用一份 <code>.dts</code> 文本描述板上有哪些硬件(地址、中断、总线、参数),<b>把硬件信息从代码里挪出去</b>。</li>
+  <li>节点、属性、<code>compatible</code>;驱动用 <code>of_match_table</code> 按 <code>compatible</code> 匹配。</li>
+  <li><code>of_</code> 系列 API 从设备树读属性。</li>
+</ul>
+<h3>4.4 probe/remove 与 devm 资源管理</h3>
+<ul>
+  <li><code>probe</code>:设备匹配上后初始化;<code>remove</code>:清理。</li>
+  <li><code>devm_</code> 系列:按设备生命周期自动释放资源,免手写清理、防泄漏。</li>
+</ul>
+<div class="key"><b>心智模型(务必建立):</b>驱动是"待命"的;内核发现总线上出现匹配设备,才来敲你的 <code>probe()</code> 门。硬件信息不写死在代码里,而来自<b>设备树</b>。</div>
+<div class="goal">学完能做什么:写一个 platform 驱动,用设备树描述硬件,理解 probe 匹配全过程。</div>
+
+<div class="pagebreak"></div>
+<h2>阶段 5　总线子系统</h2>
+<p><b>学什么:</b>外部芯片大多挂在标准总线上(I2C/SPI),内核为每种总线提供了驱动框架。</p>
+<h3>5.1 I2C 子系统</h3>
+<ul>
+  <li>I2C:两根线(SCL/SDA)、7 位地址的串行总线。</li>
+  <li><code>i2c_driver</code>(驱动名片)+ <code>i2c_client</code>(总线上的具体设备)。</li>
+  <li>读写:<code>i2c_smbus_read/write_*</code> 或用 regmap。</li>
+  <li><b>关键:</b>I2C 外部芯片不在 SoC 地址空间里,<b>不能 ioremap</b>,必须通过总线协议读写它的寄存器。</li>
+</ul>
+<h3>5.2 SPI 子系统</h3>
+<ul>
+  <li>四线(SCK/MOSI/MISO/CS)、全双工、更快;<code>spi_driver</code>/<code>spi_device</code>,思想与 I2C 类似。</li>
+</ul>
+<h3>5.3 regmap</h3>
+<ul>
+  <li>统一的寄存器访问抽象:一套 API 屏蔽 I2C/SPI 差异,自带缓存与 debugfs 导出。</li>
+  <li>现代传感器驱动几乎都用 regmap,而不是裸 <code>i2c_smbus</code>。</li>
+</ul>
+<div class="goal">学完能做什么:为一颗 I2C/SPI 芯片写 probe,用 regmap 读写它的寄存器(如读芯片 ID)。</div>
+
+<div class="pagebreak"></div>
+<h2>阶段 6　框架子系统(专业方向)</h2>
+<p><b>学什么:</b>内核为不同类别的设备提供了专门的子系统框架,用它们能少造轮子、且符合标准,直接对接上层生态。</p>
+<table>
+  <tr><th>子系统</th><th>用于</th><th>给你省了什么</th></tr>
+  <tr><td>input</td><td>按键、触摸、鼠标键盘</td><td>标准输入事件上报</td></tr>
+  <tr><td>gpio / pinctrl</td><td>引脚复用与 GPIO 控制</td><td>不用自己戳 GPIO 寄存器</td></tr>
+  <tr><td>IIO</td><td>传感器(加速度/光/温度/ADC)</td><td>自动生成 sysfs 属性 + 字符设备、缓冲、触发、事件</td></tr>
+  <tr><td>hwmon</td><td>温度/电压/风扇监控</td><td>标准监控接口</td></tr>
+  <tr><td>net / block / v4l2</td><td>网络 / 存储 / 视频</td><td>各自领域的完整框架</td></tr>
+</table>
+<h3>6.1 以 IIO 为例(传感器方向)</h3>
+<ul>
+  <li>用 <code>iio_chan_spec</code> 描述通道(如加速度 x/y/z);实现 <code>read_raw</code> 返回数据。</li>
+  <li>框架自动生成 <code>/sys/bus/iio/devices/iio:device0/in_accel_x_raw</code> 等属性。</li>
+  <li>进阶:触发缓冲(中断驱动的数据流)、事件、电源管理。</li>
+</ul>
+<h3>6.2 电源管理(runtime PM)</h3>
+<ul>
+  <li>让设备空闲时自动进低功耗、被访问时唤醒,是移动/嵌入式的重要工程点。</li>
+</ul>
+<div class="goal">学完能做什么:为一颗传感器写符合 IIO 标准的驱动,用户能通过 sysfs/字符设备读数据。</div>
+
+<div class="pagebreak"></div>
+<h2>阶段 7　调试与工程能力</h2>
+<p><b>学什么:</b>让你从"能写"到"能查错、能交付"。这部分决定你的实际战斗力。</p>
+<ul>
+  <li><b>调试手段:</b><code>dmesg</code>、动态调试(<code>dev_dbg</code>/dynamic debug)、<code>ftrace</code> 看函数时序、<code>/proc</code> 与 <code>debugfs</code>、oops/panic 调用栈分析、必要时 kgdb。</li>
+  <li><b>硬件级排查:</b>逻辑分析仪/示波器抓 I2C/SPI 波形、<code>/proc/interrupts</code> 看中断计数。</li>
+  <li><b>交叉编译与部署:</b>为目标板编译,经 NFS/TFTP 加载,串口看日志。</li>
+  <li><b>代码规范与协作:</b>内核 coding style、<code>checkpatch.pl</code>、Git、持续集成(CI)。</li>
+</ul>
+<div class="goal">学完能做什么:独立定位驱动问题、交叉编译部署到板子、按内核规范提交可维护的代码。</div>
+
+<div class="pagebreak"></div>
+<h2>附录　推荐资源与练手路径</h2>
+<h3>A.1 推荐资源</h3>
+<ul>
+  <li>书:《Linux 设备驱动开发详解》(宋宝华)、《Linux Device Drivers 3rd》(LDD3,经典但偏老)。</li>
+  <li>官方文档:kernel.org 的 <code>Documentation/</code>(driver-model、i2c、iio、devicetree 等)。</li>
+  <li>源码:<code>drivers/</code> 下同类驱动是最好的范例(照着读)。</li>
+  <li>视频:正点原子 / 韦东山 的嵌入式 Linux 驱动系列(从字符设备到平台驱动到子系统,顺序和本文一致)。</li>
+</ul>
+<h3>A.2 建议练手路径(由浅入深)</h3>
+<ol>
+  <li>hello 模块 → 带参数的模块。</li>
+  <li>字符设备:控制 LED / 读按键(手动式,理解原理)。</li>
+  <li>改写成 platform 驱动 + 设备树(过渡到模型式)。</li>
+  <li>用 gpio/input 子系统重写按键(体会"用子系统"的好处)。</li>
+  <li>I2C/SPI + regmap:驱动一颗真实芯片,读它的 ID。</li>
+  <li>IIO:为一颗传感器写标准驱动,读出数据(综合实战)。</li>
+  <li>加中断、缓冲、电源管理,向量产级靠拢。</li>
+</ol>
+<div class="key"><b>贯穿始终的方法:</b>骨架优先 → 增量填肉 → 每加一小块就编译验证。不要一次写完再调,那样错误无从定位。</div>
+
+<blockquote>本文为 Linux 驱动开发入门的系统知识梳理,供零基础按阶段自学与查漏补缺。</blockquote>
+
+</body>
+</html>

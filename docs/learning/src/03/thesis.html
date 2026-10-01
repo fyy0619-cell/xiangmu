@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>驱动到底要做什么 —— 职责与它和应用的分工</title>
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:11pt; line-height:1.85; color:#1a1a1a; }
+  h1 { font-size:22pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:16pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:4px; margin-top:24px; }
+  h3 { font-size:13pt; color:#123a7a; margin-top:16px; }
+  p { margin:8px 0; text-align:justify; }
+  li { margin:5px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9.5pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:10px; font-family:Consolas,monospace; font-size:9.5pt; line-height:1.5; white-space:pre-wrap; }
+  figure { text-align:center; margin:14px 0; page-break-inside:avoid; }
+  figure img { max-width:92%; border:1px solid #e0e0e0; }
+  figcaption { font-size:10pt; color:#444; margin-top:6px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:10px 0; padding:8px 14px; color:#14502b; }
+  .q { border-left:4px solid #c0392b; background:#fdeeec; margin:10px 0; padding:8px 14px; color:#7a241b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">驱动到底要做什么<br><span style="font-size:16pt;color:#555;">—— 驱动的三件事,以及它和"应用"的分工</span></div>
+  <div class="sub">MPU-6050 IIO 驱动学习 · 概念梳理</div>
+  <div class="sub" style="margin-top:90px;font-size:12pt;">2026 年 9 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、一句话:驱动是"硬件"和"用户"之间的桥</h2>
+<p>很多初学者以为"驱动 = 把硬件信息注册一下,让内核能找到硬件"。<b>这是最大的误区。</b>"描述硬件在哪"是设备树的事;驱动真正的职责,是把一颗<b>躺在总线上、谁也用不了的芯片</b>,变成一个<b>用户能用的服务</b>。</p>
+<div class="key">驱动的本质:它是"硬件"与"用户"之间的<b>桥</b>。一个完全不懂 I2C、不懂芯片寄存器的程序,只要读一个文件就能拿到传感器数据——中间那座桥,就是驱动。</div>
+
+<h2>二、先分清三个角色:设备 / 驱动 / 应用</h2>
+<table>
+  <tr><th>角色</th><th>是什么</th><th>谁负责 / 在哪</th></tr>
+  <tr><td><b>设备 device</b></td><td>描述"哪里有个什么硬件"(在哪条总线、地址、名字)</td><td>设备树(真板子)/ new_device(模拟);不是驱动</td></tr>
+  <tr><td><b>驱动 driver</b></td><td>操作这个硬件,并开一个接口让用户能用它</td><td>你写的代码,运行在<b>内核态</b></td></tr>
+  <tr><td><b>应用 application</b></td><td>使用这个硬件(读数据、做业务)</td><td>用户程序(cat / python / App),运行在<b>用户态</b></td></tr>
+</table>
+<p>"让内核找到硬件"只是<b>设备 + 匹配机制</b>干的事,它只是让驱动的 <code>probe</code> 被调用——这是<b>开始</b>,不是结束。</p>
+
+<div class="pagebreak"></div>
+<h2>三、驱动要做的三件事</h2>
+<p>把一颗芯片变成可用的服务,驱动要依次做三件事(图 1)。</p>
+<figure><img src="figures/fig_three.png" alt="驱动三件事"><figcaption>图 1　驱动要做的三件事</figcaption></figure>
+<h3>① 匹配:让内核把硬件"交给你"</h3>
+<p>声明"我认得哪些设备"(<code>id_table</code> 按名字 / <code>of_match_table</code> 按设备树 <code>compatible</code>)。总线上出现匹配的设备 → 内核<b>自动调用你的 <code>probe()</code></b>。注意:描述"硬件在哪"是设备树/new_device 干的,不是驱动。</p>
+<h3>② 初始化:把硬件弄到能工作的状态</h3>
+<p>建立读写通道(<code>regmap</code>)、读 <code>WHO_AM_I</code> 确认芯片身份、唤醒芯片(清 sleep 位)、配置量程/采样率等。这步做完,芯片"活了",但用户还用不了它。</p>
+<h3>③ 开接口:让用户能用这个硬件(驱动的目的!)</h3>
+<p>注册到子系统(如 IIO)、定义通道(能测什么量)、实现回调 <code>read_raw</code>(用户来读时去芯片取数据返回)。注册后会自动生成 <code>/sys/bus/iio/devices/iio:device0/in_accel_x_raw</code> 等文件,用户 <code>cat</code> 就能拿数据。</p>
+<div class="key">只做 ① 等于"检测到了芯片但没人能用它";只有做到 ③,这颗传感器才真正"可用"。这正是驱动存在的意义。</div>
+
+<div class="pagebreak"></div>
+<h2>四、驱动 vs 应用:它们是分开的!</h2>
+<div class="q"><b>常见疑问:</b>"是不是把驱动和应用写在一起了?"<br><b>答:没有。我们从头到尾只写了驱动,一行应用都没写。</b></div>
+<p>驱动和应用是<b>两个分开的程序,运行在两个不同的世界</b>(图 2):</p>
+<figure><img src="figures/fig_drv_app.png" alt="驱动vs应用"><figcaption>图 2　驱动(内核态)与应用(用户态)的分工与数据流</figcaption></figure>
+<ul>
+  <li><b>驱动(内核态)</b>:我们写的 <code>mpu6050_iio.c</code>。它只负责"把数据准备好,放到 sysfs 文件里"。<code>read_raw()</code> 是<b>驱动这一侧</b>的回调(响应"有人来读了")。</li>
+  <li><b>应用(用户态)</b>:使用数据的程序。我们用的 <code>cat</code> 就是应用——Linux 自带的通用工具。<b>我们没写应用,直接借 cat 来读。</b></li>
+</ul>
+<h3>4.1 和你熟悉的 LED 例子对照</h3>
+<p>在经典字符设备里,你通常会写两个文件:</p>
+<ul>
+  <li><code>led.c</code> —— 驱动(里面有 file_operations 的 open/read/write)。</li>
+  <li><code>ledApp.c</code> —— 应用(open <code>/dev/led</code>,write 开关灯)。</li>
+</ul>
+<p>它们本来就是<b>分开的两个程序</b>。我们这次的 <code>read_raw</code> 相当于 <code>led.c</code> 里的 <code>.read</code>(都是驱动侧);区别只是——<b>我们没写配套 App,直接用 <code>cat</code> 顶替了那个应用</b>。</p>
+<h3>4.2 一次 cat 的完整数据流</h3>
+<pre>用户敲:cat /sys/bus/iio/devices/iio:device0/in_accel_x_raw
+   ↓  系统调用 read()(用户态 → 内核态)
+   ↓  IIO 子系统:把请求转成对你 read_raw() 的调用
+   ↓  你的驱动 read_raw():regmap 读芯片的加速度寄存器
+   ↓  返回数值
+用户屏幕上看到:4660</pre>
+<div class="key">看这条链:<b>cat 属于应用,read_raw 属于驱动,二者在用户态/内核态两边,通过"读文件"这个标准动作连起来</b>。它们从不"写在一起"。</div>
+
+<div class="pagebreak"></div>
+<h2>五、用 MPU6050 的代码把三件事对上号</h2>
+<table>
+  <tr><th>代码</th><th>对应哪件事</th></tr>
+  <tr><td><code>id_table</code> / <code>of_match_table</code></td><td>① 匹配:让内核把硬件交给你,触发 probe</td></tr>
+  <tr><td><code>devm_regmap_init_i2c</code>(建通道)</td><td>② 初始化:建立读写芯片的通道</td></tr>
+  <tr><td>读 <code>WHO_AM_I</code>(0x75)</td><td>② 初始化:确认芯片身份</td></tr>
+  <tr><td>清 <code>PWR_MGMT_1</code> 的 sleep 位</td><td>② 初始化:唤醒芯片</td></tr>
+  <tr><td><code>iio_chan_spec</code> 通道数组</td><td>③ 开接口:声明能测什么量(生成 in_accel_x_raw)</td></tr>
+  <tr><td><code>read_raw()</code> 回调</td><td>③ 开接口:用户来读时去芯片取数据返回</td></tr>
+  <tr><td><code>devm_iio_device_register</code></td><td>③ 开接口:把这个"柜台"挂到 /sys/bus/iio/ 下</td></tr>
+</table>
+
+<h2>六、为什么要这样分(驱动/应用解耦的好处)</h2>
+<ul>
+  <li><b>解耦</b>:应用不用懂 I2C、不用懂芯片寄存器,只管读文件;硬件细节全被驱动挡在下面。</li>
+  <li><b>标准化</b>:换一颗别的加速度芯片,只要驱动也按 IIO 标准写,上层应用<b>一行不用改</b>。</li>
+  <li><b>通用</b>:任何语言、任何工具(cat / python / C / 图形程序)都能用同一种方式读它。</li>
+</ul>
+<div class="key">一句话收尾:<b>驱动不是"告诉内核有这个硬件",而是"让这个硬件真正能被用起来";而用它的应用,是另一个分开的程序。</b></div>
+
+<blockquote>本文为 MPU-6050 IIO 驱动学习的概念梳理。配套代码:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="520" viewBox="0 0 820 520" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="818" height="518" fill="#fff" stroke="#d0d7de"/>
+  <text x="410" y="34" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">驱动要做的三件事</text>
+
+  <rect x="90" y="64" width="640" height="118" rx="10" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="120" y="92" font-size="15" font-weight="bold" fill="#0b3d91">① 匹配:让内核把硬件"交给你"</text>
+  <text x="120" y="118" font-size="12" fill="#333">· 声明"我认得哪些设备":id_table(名字)/ of_match(设备树 compatible)</text>
+  <text x="120" y="140" font-size="12" fill="#333">· 总线上出现匹配的设备 → 内核自动调用你的 probe()</text>
+  <text x="120" y="164" font-size="11" fill="#777">注:描述"硬件在哪"是设备树/new_device 的事,不是驱动的事</text>
+
+  <rect x="90" y="200" width="640" height="118" rx="10" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
+  <text x="120" y="228" font-size="15" font-weight="bold" fill="#b9770e">② 初始化:把硬件弄到能工作的状态</text>
+  <text x="120" y="254" font-size="12" fill="#333">· 建立读写通道(regmap)· 读 WHO_AM_I 确认芯片身份</text>
+  <text x="120" y="276" font-size="12" fill="#333">· 唤醒芯片(清 sleep 位)· 配置量程/采样率等</text>
+  <text x="120" y="300" font-size="11" fill="#777">这步做完,芯片已经"活了",但用户还用不了它</text>
+
+  <rect x="90" y="336" width="640" height="130" rx="10" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="120" y="364" font-size="15" font-weight="bold" fill="#1e8449">③ 开接口:让用户能用这个硬件(驱动的目的!)</text>
+  <text x="120" y="390" font-size="12" fill="#333">· 注册到子系统(如 IIO)· 定义通道(能测什么量)</text>
+  <text x="120" y="412" font-size="12" fill="#333">· 实现回调(read_raw):用户来读时,去芯片取数据返回</text>
+  <text x="120" y="436" font-size="12" fill="#14502b">→ 自动生成 /sys/bus/iio/devices/iio:device0/in_accel_x_raw</text>
+  <text x="120" y="456" font-size="11" fill="#777">用户 cat 这个文件就能拿到数据(无需懂 I2C/芯片)</text>
+
+  <line x1="410" y1="182" x2="410" y2="200" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="410" y1="318" x2="410" y2="336" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+</svg>

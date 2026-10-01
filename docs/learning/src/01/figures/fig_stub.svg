@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="440" viewBox="0 0 820 440" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="818" height="438" fill="#fff" stroke="#d0d7de"/>
+  <text x="410" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">没有真硬件,怎么让 probe 跑起来?(i2c-stub 模拟)</text>
+
+  <!-- board path -->
+  <rect x="40" y="60" width="350" height="150" rx="10" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
+  <text x="215" y="86" text-anchor="middle" font-size="14" font-weight="bold" fill="#b9770e">真板子上(正常方式)</text>
+  <text x="215" y="112" text-anchor="middle" font-size="12" fill="#333">真的 MPU6050 焊在 I2C 上</text>
+  <text x="215" y="136" text-anchor="middle" font-size="12" fill="#333">设备树里写一个节点:</text>
+  <text x="215" y="158" text-anchor="middle" font-size="11" fill="#7a5209" font-family="Consolas">imu@68 { compatible="invensense,mpu6050"; }</text>
+  <text x="215" y="184" text-anchor="middle" font-size="12" fill="#333">开机 → 内核按设备树"造出设备"</text>
+
+  <!-- VM path -->
+  <rect x="430" y="60" width="350" height="150" rx="10" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="605" y="86" text-anchor="middle" font-size="14" font-weight="bold" fill="#0b3d91">VM 上学习(模拟方式)</text>
+  <text x="605" y="110" text-anchor="middle" font-size="12" fill="#333">① modprobe i2c-stub chip_addr=0x68</text>
+  <text x="605" y="128" text-anchor="middle" font-size="11" fill="#555">→ 造一条"假 I2C 总线"+ 内存模拟的假芯片</text>
+  <text x="605" y="150" text-anchor="middle" font-size="12" fill="#333">② echo mpu6050 0x68 &gt; .../new_device</text>
+  <text x="605" y="168" text-anchor="middle" font-size="11" fill="#555">→ 手动"在总线上放一个叫 mpu6050 的设备"</text>
+  <text x="605" y="192" text-anchor="middle" font-size="12" fill="#333">等于手动替设备树干了"造出设备"这件事</text>
+
+  <!-- converge -->
+  <line x1="215" y1="210" x2="360" y2="255" stroke="#b9770e" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="605" y1="210" x2="460" y2="255" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="230" y="262" width="360" height="52" rx="10" fill="#e8eef8" stroke="#0b3d91" stroke-width="2"/>
+  <text x="410" y="285" text-anchor="middle" font-size="13" font-weight="bold" fill="#0b3d91">两条路殊途同归:总线上"出现了一个设备"</text>
+  <text x="410" y="304" text-anchor="middle" font-size="11" fill="#333">名字/compatible = 你驱动认得的</text>
+
+  <line x1="410" y1="314" x2="410" y2="352" stroke="#1e8449" stroke-width="3" marker-end="url(#a)"/>
+  <rect x="250" y="358" width="320" height="52" rx="10" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="410" y="381" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e8449">内核匹配成功 → 调用你的 probe()</text>
+  <text x="410" y="401" text-anchor="middle" font-size="11" fill="#333">dmesg 看到 "probe: matched ..."</text>
+</svg>

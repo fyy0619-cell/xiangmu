@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="500" viewBox="0 0 820 500" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="818" height="498" fill="#fff" stroke="#d0d7de"/>
+  <text x="410" y="32" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">整体图景:从应用程序到硬件的分层</text>
+
+  <rect x="120" y="58" width="580" height="56" rx="8" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="410" y="80" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e8449">用户空间(应用程序)</text>
+  <text x="410" y="100" text-anchor="middle" font-size="11" fill="#333">open()/read()/write()/ioctl() · cat /sys/... · 你写的 App、命令行工具</text>
+
+  <text x="410" y="132" text-anchor="middle" font-size="12" fill="#0b3d91">系统调用(用户态 → 内核态的唯一入口)</text>
+
+  <rect x="120" y="144" width="580" height="150" rx="8" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="410" y="166" text-anchor="middle" font-size="14" font-weight="bold" fill="#0b3d91">内核空间</text>
+  <rect x="140" y="178" width="250" height="44" rx="5" fill="#fff" stroke="#5b8def"/><text x="265" y="196" text-anchor="middle" font-size="12">VFS / 字符设备 / 各类接口</text><text x="265" y="213" text-anchor="middle" font-size="10" fill="#555">把系统调用转到具体驱动</text>
+  <rect x="410" y="178" width="270" height="44" rx="5" fill="#f7f0ff" stroke="#7d3c98"/><text x="545" y="196" text-anchor="middle" font-size="12">子系统框架(IIO/input/gpio...)</text><text x="545" y="213" text-anchor="middle" font-size="10" fill="#555">提供标准模型,少造轮子</text>
+  <rect x="140" y="232" width="540" height="44" rx="5" fill="#fff6ea" stroke="#b9770e"/><text x="410" y="250" text-anchor="middle" font-size="12" font-weight="bold" fill="#b9770e">你写的驱动(probe 里干活)</text><text x="410" y="267" text-anchor="middle" font-size="10" fill="#555">通过总线(i2c/spi)或 ioremap 访问硬件</text>
+
+  <text x="410" y="318" text-anchor="middle" font-size="12" fill="#0b3d91">总线 / 寄存器访问(I2C 协议 或 内存映射 readl/writel)</text>
+
+  <rect x="120" y="330" width="580" height="56" rx="8" fill="#fdeaea" stroke="#c0392b" stroke-width="2"/>
+  <text x="410" y="352" text-anchor="middle" font-size="14" font-weight="bold" fill="#c0392b">硬件</text>
+  <text x="410" y="372" text-anchor="middle" font-size="11" fill="#333">SoC 内部外设(GPIO/定时器…)· 外部芯片(MPU6050 等,挂在 I2C/SPI)</text>
+
+  <line x1="410" y1="114" x2="410" y2="144" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="410" y1="294" x2="410" y2="330" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+
+  <rect x="120" y="408" width="580" height="76" rx="8" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="410" y="430" text-anchor="middle" font-size="12" font-weight="bold" fill="#0b3d91">学驱动,本质就是学"内核空间"这一层</text>
+  <text x="410" y="452" text-anchor="middle" font-size="11" fill="#333">向上:如何响应系统调用、把数据给用户;向下:如何访问硬件寄存器</text>
+  <text x="410" y="472" text-anchor="middle" font-size="11" fill="#333">再往上一层:用子系统框架(如 IIO)让驱动标准化、少写重复代码</text>
+</svg>

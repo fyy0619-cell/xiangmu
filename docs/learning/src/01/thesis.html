@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Linux 驱动入门必备知识梳理(MPU-6050 IIO 项目 · 阶段一)</title>
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:11pt; line-height:1.8; color:#1a1a1a; }
+  h1 { font-size:22pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:16pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:4px; margin-top:26px; }
+  h3 { font-size:13.5pt; color:#123a7a; margin-top:18px; }
+  p { margin:8px 0; text-align:justify; }
+  ul,ol { margin:8px 0; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:12px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9.5pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:10px; font-family:Consolas,monospace; font-size:9pt; line-height:1.4; white-space:pre-wrap; }
+  figure { text-align:center; margin:16px 0; page-break-inside:avoid; }
+  figure img { max-width:96%; border:1px solid #e0e0e0; }
+  figcaption { font-size:10pt; color:#444; margin-top:6px; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:10px 0; padding:8px 14px; color:#14502b; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:24px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+  .toc div { margin:5px 0; } .toc .l1 { font-weight:bold; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">Linux 驱动入门 · 必备知识梳理</div>
+  <div class="sub">MPU-6050 IIO 驱动项目 —— 阶段一(从内核模块到设备-驱动匹配)</div>
+  <div class="sub" style="margin-top:80px;font-size:12pt;">配套项目:github.com/fyy0619-cell/xiangmu　·　2026 年 9 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>这份文档给谁看</h2>
+<p>这是我们从零手写 MPU-6050 IIO 驱动过程中,到"用 i2c-stub 触发 probe"这一步为止,<b>你必须搞懂的底层知识</b>的系统梳理。之前之所以在 i2c-stub 那步卡住,不是那一步难,而是它下面的几层地基(内核模块、编译加载、设备-驱动模型、I2C)还没连成一个体系。本文把它们串起来。读完再回去看代码,就通了。</p>
+<div class="key"><b>一条主线:</b>写内核模块 → 学会编译加载 → 理解"驱动不是从上跑到下,而是待命等设备来匹配" → 知道设备从哪来(设备树 / i2c-stub) → 明白 I2C 设备为什么必须走总线。</div>
+
+<div class="pagebreak"></div>
+<h2 style="border:none;text-align:center;">目　录</h2>
+<div class="toc">
+  <div class="l1">第 1 章　内核模块(LKM)是什么</div>
+  <div class="l1">第 2 章　模块的编译与加载(工作流)</div>
+  <div class="l1">第 3 章　两种驱动写法:手动式 vs 模型式</div>
+  <div class="l1">第 4 章　Linux 设备-驱动模型(最重要)</div>
+  <div class="l1">第 5 章　I2C 子系统基础</div>
+  <div class="l1">第 6 章　没有硬件怎么开发:i2c-stub 模拟</div>
+  <div class="l1">第 7 章　sysfs 与 /dev(为 IIO 铺垫)</div>
+  <div class="l1">第 8 章　我们现在在哪 + 下一步</div>
+  <div class="l1">附录　命令与概念速查表</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>第 1 章　内核模块(LKM)是什么</h2>
+<p>Linux 内核可以在<b>运行时</b>动态加载一段代码来扩展功能,这段代码就是<b>内核模块</b>(Loadable Kernel Module,LKM),文件后缀 <code>.ko</code>(kernel object)。驱动通常就是以模块形式存在。</p>
+<h3>1.1 模块的两个"门"</h3>
+<p>每个模块都有加载和卸载时执行的函数:</p>
+<pre>module_init(xxx_init);   // 加载时调用 xxx_init()
+module_exit(xxx_exit);   // 卸载时调用 xxx_exit()</pre>
+<ul>
+  <li><code>__init</code>:标记初始化函数,内核在初始化完成后可回收这段内存。</li>
+  <li><code>pr_info("...")</code> / <code>printk(...)</code>:往<b>内核日志</b>打印,用 <code>dmesg</code> 查看。它不像应用程序的 printf 直接打到屏幕。</li>
+  <li><code>MODULE_LICENSE("GPL")</code>:必须声明许可,否则内核会拒绝使用部分符号或告警。</li>
+</ul>
+<div class="key"><b>关键区别:</b>应用程序是"main 跑完就退出";内核模块是"加载后<b>常驻</b>在内核里,提供功能,直到你卸载它"。</div>
+
+<div class="pagebreak"></div>
+<h2>第 2 章　模块的编译与加载(工作流)</h2>
+<h3>2.1 用内核的构建系统编译(kbuild)</h3>
+<p>模块不能用普通 <code>gcc a.c</code> 编,必须借<b>内核的构建系统</b>。Makefile 里:</p>
+<pre>obj-m := mpu6050_iio.o      # 把 .c 编成"模块"(m = module)
+KERNELDIR := /lib/modules/$(shell uname -r)/build   # 内核头文件所在
+kernel_modules:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+</pre>
+<ul>
+  <li><code>-C $(KERNELDIR)</code>:先跳到内核源码目录,用它的规则;</li>
+  <li><code>M=$(PWD)</code>:再指回我们自己的目录来编。</li>
+  <li>产物:<code>mpu6050_iio.ko</code>。</li>
+</ul>
+<div class="key"><b>重要:</b>你看到 VSCode 里一堆红波浪线,那是它的智能提示找不到内核头文件,<b>不是真错误</b>。判断代码对不对,<b>永远以终端 <code>make</code> 为准</b>。</div>
+
+<h3>2.2 加载的两条路:insmod 与 modprobe</h3>
+<table>
+  <tr><th></th><th>insmod ./x.ko</th><th>modprobe x</th></tr>
+  <tr><td>参数</td><td>具体 .ko 文件路径</td><td>模块名字</td></tr>
+  <tr><td>依赖</td><td>不处理,缺符号就报错</td><td>自动加载依赖</td></tr>
+  <tr><td>查找</td><td>你指的路径</td><td>只在 /lib/modules/ 里按 modules.dep 找</td></tr>
+  <tr><td>前提</td><td>无</td><td>要先 make install + depmod</td></tr>
+</table>
+<p>用 <code>modprobe</code> 时的完整循环(每次改完代码都要重跑):</p>
+<pre>make                     # 1) 编译出 .ko
+sudo make install        # 2) 装到 /lib/modules/.../extra/
+sudo depmod -a           # 3) 重建依赖数据库 modules.dep
+sudo modprobe mpu6050_iio  # 4) 按名字加载
+dmesg | tail             #    看日志
+sudo modprobe -r mpu6050_iio  # 卸载</pre>
+<ul>
+  <li>凡是动 <code>/lib/modules</code> 的命令(<code>make install</code>、<code>depmod</code>、<code>modprobe</code>)都要 <code>sudo</code>(改系统目录)。</li>
+  <li><code>depmod</code> 的作用:扫描所有模块、重建"名字→文件→依赖"数据库,<b>这就是 modprobe 能按名字找到模块并自动带依赖的底气</b>。</li>
+  <li>加载出现 <code>tainting kernel</code> / <code>module verification failed</code>:自编未签名模块的<b>正常提示</b>,不影响运行。</li>
+</ul>
+
+<div class="pagebreak"></div>
+<h2>第 3 章　两种驱动写法:手动式 vs 模型式</h2>
+<p>这是最容易混淆的地方,也是入门到进阶的分水岭。</p>
+<table>
+  <tr><th></th><th>手动式(教程入门,如 LED)</th><th>模型式(本项目 / 量产驱动)</th></tr>
+  <tr><td>入口</td><td>module_init 里从上到下做完所有事</td><td>module_i2c_driver 注册后"待命",等匹配</td></tr>
+  <tr><td>谁调你的初始化</td><td>你自己在 init 里干</td><td>内核在"设备↔驱动匹配"时自动调 probe()</td></tr>
+  <tr><td>硬件信息</td><td>硬编码在 .c 里(物理地址)</td><td>放设备树,代码不写死</td></tr>
+  <tr><td>访问硬件</td><td>自己 ioremap + readl/writel 戳寄存器</td><td>走总线子系统(i2c/regmap)读写</td></tr>
+  <tr><td>对外接口</td><td>自己写 file_operations(open/read/write)</td><td>由子系统(如 IIO)自动提供</td></tr>
+</table>
+<div class="key"><b>为什么 MPU6050 只能用模型式:</b>LED 是 SoC 内部 GPIO,可以 ioremap 直接戳寄存器;但 <b>MPU6050 是挂在 I2C 总线上的外部芯片,根本不在 SoC 的地址空间里,你无法 ioremap 它</b>,只能通过 I2C 总线协议去读写它的寄存器。所以必须用 i2c_driver + probe。这是<b>物理决定的,不是风格选择</b>。</div>
+<p>进阶阶梯:①手动裸写(register_chrdev+ioremap)→ ②platform_driver+设备树 → ③用子系统(gpio/iio)→ ④标准总线+标准子系统(i2c+IIO)。你跟的视频从①起步,本项目直接练到④。</p>
+
+<div class="pagebreak"></div>
+<h2>第 4 章　Linux 设备-驱动模型(最重要)</h2>
+<p>现代内核把"驱动"和"设备"<b>分开</b>,由"总线"来撮合:</p>
+<ul>
+  <li><b>driver(驱动)</b>:你写的代码。注册后<b>待命</b>,并声明"我认得哪些设备"(靠 <code>id_table</code> / <code>of_match_table</code>),带着 <code>probe()</code> 和 <code>remove()</code> 两个回调。</li>
+  <li><b>device(设备)</b>:硬件的一份<b>描述</b>(在哪条总线、什么地址、叫什么)。它从<b>设备树</b>(真板子)或 <b>i2c-stub/new_device</b>(VM 模拟)来。</li>
+  <li><b>bus(总线)</b>:比如 i2c 核心。它拿驱动的"认得表"去比对设备的名字。</li>
+</ul>
+<p>三者的关系如图 4-1:</p>
+<figure><img src="figures/fig_match.png" alt="设备驱动匹配"><figcaption>图 4-1　Linux 设备-驱动匹配模型</figcaption></figure>
+<div class="key"><b>一句话记住:</b>你的驱动写好后是"待命"的;<b>内核发现总线上出现了匹配的设备,就来敲你的 probe() 门。</b>所以"驱动加载了但 probe 没被调用"是正常的——因为总线上还没有匹配的设备!这正是你卡住那一步的真相:你只加载了驱动(待命),还没"放一个设备上去"。</div>
+<h3>4.1 两种匹配方式</h3>
+<ul>
+  <li><b>id_table</b>(名字匹配):声明能驱动名叫 <code>"mpu6050"</code> 的设备。VM 上 <code>new_device</code> 起的名字就走这条。</li>
+  <li><b>of_match_table</b>(设备树匹配):设备树节点写 <code>compatible = "invensense,mpu6050"</code>,内核据此匹配。真板子走这条。</li>
+</ul>
+<p><code>MODULE_DEVICE_TABLE(i2c, ...)</code> / <code>MODULE_DEVICE_TABLE(of, ...)</code> 的作用:把这两张表写进模块信息,让 depmod / 热插拔 / 自动加载能用到。</p>
+
+<div class="pagebreak"></div>
+<h2>第 5 章　I2C 子系统基础</h2>
+<h3>5.1 I2C 是什么</h3>
+<p>I2C 是一种<b>两根线的串行总线</b>:SCL(时钟)、SDA(数据),多个设备挂在同一对线上,每个设备有一个<b>7 位地址</b>(MPU6050 是 <code>0x68</code>,由 AD0 引脚决定 0x68/0x69)。主控(SoC)通过"给地址 + 读/写寄存器号 + 数据"和某个从设备通信。</p>
+<h3>5.2 驱动里的两个关键结构</h3>
+<ul>
+  <li><code>struct i2c_driver</code>:你的驱动"名片"(名字、匹配表、probe/remove)。</li>
+  <li><code>struct i2c_client</code>:代表<b>总线上那个具体设备</b>(在哪条总线、地址多少)。probe 的参数就是它,以后读写传感器全靠它。</li>
+</ul>
+<h3>5.3 为什么 I2C 设备不能 ioremap</h3>
+<p><code>ioremap</code> 是把<b>SoC 地址空间里</b>的寄存器映射到内核虚拟地址。而 I2C 外部芯片<b>不在 SoC 地址空间里</b>——它在总线的另一端。要读它的寄存器,必须发起一次 I2C 传输(<code>i2c_smbus_read_*</code> 或后面要学的 <b>regmap</b>)。这就是模型式驱动的根本原因。</p>
+
+<div class="pagebreak"></div>
+<h2>第 6 章　没有硬件怎么开发:i2c-stub 模拟</h2>
+<p>手上没有真 MPU6050、或不想每次都折腾板子时,可以用内核自带的 <code>i2c-stub</code> <b>造一颗假芯片</b>,让 probe 真的跑起来。原理如图 6-1。</p>
+<figure><img src="figures/fig_stub.png" alt="i2c-stub模拟"><figcaption>图 6-1　i2c-stub 模拟:两条路殊途同归地"在总线上造出设备"</figcaption></figure>
+<h3>6.1 三条命令的含义</h3>
+<pre>sudo modprobe i2c-stub chip_addr=0x68</pre>
+<p>加载 i2c-stub 模块:它<b>虚拟出一条 I2C 总线</b>,上面有一颗地址 0x68 的假芯片,寄存器用内存模拟(可读可写)。</p>
+<pre>for d in /sys/class/i2c-adapter/i2c-*; do echo "$d -&gt; $(cat $d/name)"; done</pre>
+<p>列出所有 I2C 适配器,找到名字是 <code>SMBus stub driver</code> 的那条,记下它的编号 N。</p>
+<pre>sudo sh -c 'echo mpu6050 0x68 &gt; /sys/bus/i2c/devices/i2c-N/new_device'</pre>
+<p>在这条假总线上<b>实例化一个名为 mpu6050 的设备</b>。这一步<b>等价于设备树在真板子上干的事</b>——"在总线上放一个设备"。设备一出现,名字和你驱动的 id_table 对上 → 内核调用你的 probe → dmesg 出现 <code>probe: matched</code>。</p>
+<div class="key"><b>你之前卡住的本质:</b>你以为"加载驱动"就应该看到 probe;其实还差"造出设备"这一步。<code>new_device</code> 就是手动造设备。理解了第 4 章的"待命→匹配→probe",这一步就顺理成章了。</div>
+<p>清理(方便重来):</p>
+<pre>sudo sh -c 'echo 0x68 &gt; /sys/bus/i2c/devices/i2c-N/delete_device'
+sudo modprobe -r mpu6050_iio
+sudo modprobe -r i2c-stub</pre>
+
+<div class="pagebreak"></div>
+<h2>第 7 章　sysfs 与 /dev(为 IIO 铺垫)</h2>
+<p>驱动怎么把数据给用户?两种常见出口:</p>
+<ul>
+  <li><b>sysfs</b>:<code>/sys/...</code> 下的"文件",<code>cat</code> 一下读一个值、<code>echo</code> 一下设一个值。后面 IIO 会自动生成 <code>/sys/bus/iio/devices/iio:device0/in_accel_x_raw</code> 这类属性,你 <code>cat</code> 就能读加速度。</li>
+  <li><b>/dev 字符设备</b>:<code>/dev/iio:device0</code>,适合<b>连续高速</b>数据流(缓冲)。</li>
+</ul>
+<p>我们前面手动写 <code>register_chrdev</code> 是在<b>自己造</b>字符设备接口;而 <b>IIO 子系统会替我们自动生成</b> sysfs 属性和字符设备,这就是"用子系统"省事又标准的地方。</p>
+
+<div class="pagebreak"></div>
+<h2>第 8 章　我们现在在哪 + 下一步</h2>
+<p><b>已经完成(阶段一):</b></p>
+<ol>
+  <li>搭好 VM 开发环境,跑通"编译→加载→dmesg"(hello 模块)。</li>
+  <li>写出 i2c 驱动<b>骨架</b>:匹配表 + probe/remove + i2c_driver + module_i2c_driver。</li>
+  <li>用 i2c-stub 造假设备,<b>触发 probe</b>,亲眼看到设备-驱动匹配。</li>
+</ol>
+<p><b>下一步(阶段二):往 probe 里"填肉"。</b>每次只加一小块,编译验证一次:</p>
+<table>
+  <tr><th>步骤</th><th>往 probe 里加什么</th><th>验证</th></tr>
+  <tr><td>①</td><td>regmap 初始化(建立"怎么读写这颗芯片"的通道)</td><td>无报错加载</td></tr>
+  <tr><td>②</td><td>读 WHO_AM_I(寄存器 0x75)校验是不是 MPU6050</td><td>dmesg 打印芯片 ID(用 i2cset 预置 0x75=0x68)</td></tr>
+  <tr><td>③</td><td>唤醒芯片、配置量程/采样率</td><td>无报错</td></tr>
+  <tr><td>④</td><td>注册到 IIO 子系统 + 定义通道</td><td>出现 /sys/bus/iio/devices/iio:device0</td></tr>
+  <tr><td>⑤</td><td>实现 read_raw</td><td>cat in_accel_x_raw 能读值</td></tr>
+</table>
+<div class="key"><b>工程方法(通用):</b>骨架优先 → 增量填肉 → 每加一块就编译验证。出错也好定位,因为你只改了一小块。</div>
+
+<div class="pagebreak"></div>
+<h2>附录　命令与概念速查表</h2>
+<h3>A.1 常用命令</h3>
+<table>
+  <tr><th>命令</th><th>作用</th></tr>
+  <tr><td>make</td><td>编译模块,产出 .ko</td></tr>
+  <tr><td>sudo make install</td><td>装到 /lib/modules/.../extra/</td></tr>
+  <tr><td>sudo depmod -a</td><td>重建依赖库 modules.dep</td></tr>
+  <tr><td>sudo modprobe x / -r x</td><td>按名字加载 / 卸载</td></tr>
+  <tr><td>sudo insmod ./x.ko / rmmod x</td><td>按文件加载 / 卸载(开发期快)</td></tr>
+  <tr><td>dmesg | tail</td><td>看内核日志</td></tr>
+  <tr><td>lsmod | grep x</td><td>看模块是否已加载</td></tr>
+  <tr><td>modinfo x.ko</td><td>看模块信息(作者、匹配表等)</td></tr>
+  <tr><td>i2cdetect -l</td><td>列出 I2C 适配器(需 i2c-tools)</td></tr>
+</table>
+<h3>A.2 概念对照</h3>
+<table>
+  <tr><th>概念</th><th>一句话</th></tr>
+  <tr><td>driver</td><td>你的代码,待命,声明认得哪些设备</td></tr>
+  <tr><td>device</td><td>硬件的描述,来自设备树或 new_device</td></tr>
+  <tr><td>bus</td><td>撮合 driver 和 device 的总线(如 i2c)</td></tr>
+  <tr><td>probe()</td><td>匹配成功后内核自动调用的"接管"函数</td></tr>
+  <tr><td>id_table</td><td>按名字匹配设备的表</td></tr>
+  <tr><td>of_match_table</td><td>按设备树 compatible 匹配的表</td></tr>
+  <tr><td>i2c_client</td><td>总线上那个具体设备(总线号+地址)</td></tr>
+  <tr><td>regmap</td><td>统一的寄存器读写抽象(下一阶段学)</td></tr>
+  <tr><td>IIO</td><td>传感器子系统,自动生成 sysfs/字符设备</td></tr>
+</table>
+
+<blockquote>本文为 MPU-6050 IIO 学习项目配套知识梳理。配套代码:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
