@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>regmap 深入理解 · struct regmap 的本质、用法与内存模型</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.7; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  h4 { font-size:11pt; color:#123a7a; margin-top:10px; }
+  p { margin:6px 0; text-align:justify; }
+  li { margin:3px 0; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; color:#b1264a; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-left:4px solid #0b3d91; border-radius:5px; padding:9px 11px; font-family:Consolas,monospace; font-size:8.5pt; line-height:1.45; white-space:pre-wrap; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:9.5pt; }
+  th,td { border:1px solid #9bb0d0; padding:5px 8px; text-align:left; vertical-align:top; }
+  th { background:#e8eef8; color:#0b3d91; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">regmap 深入理解<br>struct regmap 的本质、用法与内存模型</div>
+  <div class="sub">从"图纸 vs 机器"到句柄套路、函数参数、内核内存与工厂</div>
+  <div class="sub" style="margin-top:80px;font-size:12pt;">配套仓库:github.com/fyy0619-cell/xiangmu　·　2026 年 10 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>0　一句话本质(先记这个)</h2>
+
+<blockquote><b>regmap 是内核的"寄存器访问抽象层"。你填一张只读的配置图纸 <code>regmap_config</code>,内核据此在内核堆上造出一个对你不透明的对象 <code>struct regmap</code>,并只给你一个指向它的指针(句柄)。之后所有读写都通过 <code>regmap_xxx(句柄, ...)</code> 函数间接进行——换 I2C/SPI 只改造对象时用的那一个入口函数,业务代码一行不动。</b></blockquote>
+
+<p>把两个最容易混的名字先钉死:</p>
+
+<table>
+<tr><th>名字</th><th>是什么</th><th>谁创建</th><th>你能看到内部吗</th><th>定义在哪</th></tr>
+<tr><td><code>struct regmap_config</code></td><td><b>图纸 / 配置单</b>:描述芯片寄存器特性(地址宽度、值宽度、最大地址……)</td><td>你,写成 <code>const</code> 常量</td><td>能,字段全公开</td><td><code>include/linux/regmap.h</code></td></tr>
+<tr><td><code>struct regmap</code></td><td><b>真正干活的对象</b>:内含总线读写回调、锁、缓存、从 config 拷来的参数</td><td>内核在 init 里 <code>kzalloc</code></td><td><b>不能</b>,对驱动不透明</td><td><code>drivers/base/regmap/internal.h</code>(藏起来)</td></tr>
+</table>
+
+<blockquote>类比:<code>regmap_config</code> 是<b>点菜单</b>(你勾"8 位地址、8 位数据、最大 0x75");<code>devm_regmap_init_i2c()</code> 是<b>厨房</b>;<code>struct regmap</code> 是<b>做好的菜</b>(在厨房里),你只拿到一张<b>取餐号 = 指针</b>;<code>regmap_read()</code> 就是凭号找厨房要东西——你从不自己进厨房翻锅。</blockquote>
+
+<div class="pagebreak"></div>
+<h2>1　两个结构体:图纸 vs 机器</h2>
+
+<h3>1.1 regmap_config:你交给内核的"订单"</h3>
+<pre>static const struct regmap_config mpu6050_regmap_config = {
+    .reg_bits = 8,        // 寄存器地址宽度(位)
+    .val_bits = 8,        // 每个寄存器值的宽度(位)
+    .max_register = 0x75, // 最大寄存器地址(WHO_AM_I)
+};</pre>
+<p>这<b>只是一张描述芯片特性的订单</b>,本身不干活、不能读写寄存器。<code>const</code> 说明它是只读常量,编译进只读数据段。它的唯一作用:<b>当原材料,喂给构造函数。</b></p>
+
+<h3>1.2 struct regmap:内核按订单造出的"机器"</h3>
+<pre>struct regmap *map;   // 注意是指针!
+
+map = devm_regmap_init_i2c(client, &mpu6050_regmap_config);
+//                          ↑客户端    ↑你的订单(图纸)
+//    ↑返回一个指向"真正 regmap 对象"的指针</pre>
+<p>发生了什么:</p>
+<pre>你的 config(图纸)  ┐
+                   ├──► devm_regmap_init_i2c() ──► 内核 kzalloc 一个
+client(走哪条总线)┘        (工厂)              struct regmap 对象
+                                                      │
+                                       把 config 的字段拷进去、
+                                       把总线读写函数绑进去、
+                                       初始化锁、缓存……
+                                                      │
+                                                      ▼
+                                          返回这个对象的地址 → map</pre>
+<p><b><code>map</code> 的值,就是内核堆上那个 <code>struct regmap</code> 对象的起始地址</b>(一个指针)。你 <code>printk("%p", map)</code> 能打出来,但那个数字对你没意义——你只拿它当"身份证"用。</p>
+
+<h3>1.3 为什么内部要藏起来</h3>
+<p>public 头文件 <code>&lt;linux/regmap.h&gt;</code> 里只有一句前向声明 <code>struct regmap;</code>,不给你看字段。这叫<b>不透明指针 / 封装</b>,逼你只能通过函数操作:</p>
+<pre>regmap_read(map, 0x75, &val);     // ✅ 只能这样用
+val = map->cache[0x75];           // ❌ 编译报错:incomplete type,看不到内部</pre>
+<p>好处:内核以后改 <code>struct regmap</code> 内部实现,你的驱动一行都不用改——因为你从没依赖它的内部长相。和 C++ 的 private 成员一个思想。</p>
+
+<div class="pagebreak"></div>
+<h2>2　核心套路:第一个参数永远是句柄</h2>
+
+<p>几乎每个 regmap 函数第一个参数都是 <code>map</code>(或存起来的 <code>data->regmap</code>)。这不是巧合,是 C 语言的经典<b>句柄(handle)</b>模式:</p>
+<pre>regmap_read(map, reg, &val);
+regmap_write(map, reg, val);
+regmap_update_bits(map, reg, mask, val);
+//           ↑ 全都是它打头</pre>
+
+<p><b>为什么?</b> 这些函数自己不知道"该操作哪颗芯片、走哪条总线"。<code>map</code> 指向的对象里藏着总线读写函数、设备地址、锁、缓存等一切信息。你把 <code>map</code> 传进去,函数才知道:要读的是 <b>I2C-1 总线上 0x68 那颗芯片</b>,用 <b>i2c 的读函数</b>,读之前先抢 <b>这个 map 的锁</b>。</p>
+
+<blockquote>类比文件操作:<code>FILE *fp = fopen(...)</code> 得到句柄,之后 <code>fread(buf, 1, n, fp)</code>、<code>fclose(fp)</code> 都要带 <code>fp</code>,否则 <code>fread</code> 不知道读哪个文件。<b><code>map</code> = 操作对象的身份证,所以永远排第一个。</b></blockquote>
+
+<div class="pagebreak"></div>
+<h2>3　常用函数逐个拆:参数为什么是它</h2>
+
+<h3>3.1 devm_regmap_init_i2c —— 造句柄(唯一第一参数不是 map)</h3>
+<pre>struct regmap *devm_regmap_init_i2c(struct i2c_client *client,
+                                    const struct regmap_config *config);</pre>
+<p>此刻 regmap 还没造出来,它正是来造 regmap 的,所以第一参数是 client。</p>
+<table>
+<tr><th>参数</th><th>传什么</th><th>为什么要它</th></tr>
+<tr><td><code>client</code></td><td>probe 收到的 client</td><td>告诉工厂:走哪条总线、芯片地址 0x68。工厂从 client 扒出 I2C 信息,绑定对应读写函数</td></tr>
+<tr><td><code>config</code></td><td><code>&mpu6050_regmap_config</code></td><td>告诉工厂:寄存器 8 位、值 8 位、最大 0x75。传的是<b>地址 <code>&</code></b>(指针),不是整个结构体拷贝</td></tr>
+</table>
+<pre>data->regmap = devm_regmap_init_i2c(client, &mpu6050_regmap_config);
+if (IS_ERR(data->regmap))          // 失败返回"错误码伪装的指针"
+    return PTR_ERR(data->regmap);  // 用 IS_ERR/PTR_ERR 判断,不能用 == NULL</pre>
+
+<h3>3.2 regmap_read —— 读一个寄存器</h3>
+<pre>int regmap_read(struct regmap *map, unsigned int reg, unsigned int *val);
+
+regmap_read(data->regmap, MPU6050_REG_WHO_AM_I, &whoami);</pre>
+<table>
+<tr><th>位置</th><th>参数</th><th>含义</th></tr>
+<tr><td>第1</td><td><code>map</code></td><td><b>句柄</b>:读哪颗芯片</td></tr>
+<tr><td>第2</td><td><code>reg</code></td><td><b>寄存器地址</b>:读这颗芯片的哪个寄存器</td></tr>
+<tr><td>第3</td><td><code>val</code></td><td><b>结果往哪放</b>:读到的值写进这个地址,所以要 <code>&whoami</code></td></tr>
+</table>
+<p><b>为什么第 3 个是 <code>&whoami</code>(取地址)?</b> C 函数只能 <code>return</code> 一个值,而这里 <code>return</code> 已被"成功/失败错误码"占用。读到的<b>数据</b>只能用<b>输出参数</b>带出来:你给它一个变量地址,函数把数据填进去。</p>
+<pre>unsigned int whoami;                         // ① 先准备空变量
+int ret = regmap_read(map, 0x75, &whoami);   // ② 把它的地址给函数(内部执行 *val = 读到的值)
+if (ret)                                      // ③ ret==0 成功,非0是错误码(如 -EIO)
+    return ret;
+printk("WHO_AM_I = 0x%x\n", whoami);          // 打印 0x68</pre>
+<blockquote>两条铁律:① 函数的 <code>return</code> 值 = <b>错误码</b>(0 成功,负数失败),不是数据;② <b>数据通过指针参数带出来</b>,所以读要 <code>&</code>。</blockquote>
+
+<h3>3.3 regmap_write —— 写一个寄存器</h3>
+<pre>int regmap_write(struct regmap *map, unsigned int reg, unsigned int val);
+
+regmap_write(data->regmap, MPU6050_REG_PWR_MGMT_1, 0x00);</pre>
+<p>第 3 个参数是<b>要写进去的值,直接给值,不是 <code>&</code></b>。对比读/写最容易错的一点:</p>
+<pre>regmap_read (map, reg, &val);  // 读:给地址(&),让函数往里塞   ← 数据流出芯片→进你变量
+regmap_write(map, reg,  val);  // 写:给值,函数拿去写出去       ← 数据从你这→进芯片</pre>
+
+<h3>3.4 regmap_update_bits —— 只改某几位(最常用)</h3>
+<pre>int regmap_update_bits(struct regmap *map, unsigned int reg,
+                       unsigned int mask, unsigned int val);
+
+// 唤醒 MPU6050:清除 PWR_MGMT_1(0x6B)的 bit6
+regmap_update_bits(data->regmap, 0x6B, BIT(6), 0);</pre>
+<table>
+<tr><th>位置</th><th>参数</th><th>含义</th></tr>
+<tr><td>第3</td><td><code>mask</code></td><td><b>哪些位要动</b>(1=这位要改,0=保持不变)</td></tr>
+<tr><td>第4</td><td><code>val</code></td><td><b>这些位改成什么</b></td></tr>
+</table>
+<p>内部干的是读-改-写:<code>新值 = (旧值 & ~mask) | (val & mask)</code>。<b>为什么需要 mask?</b> 一个寄存器里塞了好几个功能位,你只想改 bit6(睡眠位),不能用 <code>regmap_write</code> 粗暴覆盖整字节——那会把其他位清掉。<code>update_bits</code> 帮你"只碰指定位",且<b>全程加锁</b>,不怕并发。</p>
+
+<h3>3.5 regmap_bulk_read —— 一次读一串连续寄存器</h3>
+<pre>int regmap_bulk_read(struct regmap *map, unsigned int reg,
+                     void *val, size_t val_count);
+
+__be16 raw[7];
+regmap_bulk_read(data->regmap, MPU6050_REG_ACCEL_XOUT_H, raw, sizeof(raw));</pre>
+<p>第2个是<b>起始</b>寄存器地址,第3个是缓冲区(数组名本身就是地址,不用 <code>&</code>),第4个是长度。MPU6050 的 X/Y/Z 加速度+温度+陀螺仪共 14 字节连续,一次读回,比调 14 次 <code>regmap_read</code> 快得多(只发一次总线事务)。</p>
+
+<div class="pagebreak"></div>
+<h2>4　data->regmap:句柄存哪、为什么带 data-></h2>
+
+<p>probe 里造好的 <code>map</code> 是<b>局部变量</b>,probe 一返回就没了。但读数据、中断处理这些函数<b>事后</b>还要用它。解决办法:把句柄存进驱动的<b>私有数据结构</b>。</p>
+<pre>/* ① 定义你自己的"随身包",把句柄装进去 */
+struct mpu6050_data {
+    struct regmap *regmap;     // ← 句柄存这儿
+    struct device *dev;
+    // ...其他要跨函数共享的东西
+};
+
+static int mpu6050_probe(struct i2c_client *client)
+{
+    struct mpu6050_data *data;
+
+    data = devm_kzalloc(&client->dev, sizeof(*data), GFP_KERNEL);   // ② 分配随身包
+    data->regmap = devm_regmap_init_i2c(client, &mpu6050_regmap_config); // ③ 造句柄存进包
+    i2c_set_clientdata(client, data);                               // ④ 把包挂到 client 上
+
+    unsigned int whoami;                                            // ⑤ 现在就能用
+    regmap_read(data->regmap, MPU6050_REG_WHO_AM_I, &whoami);
+    return 0;
+}
+
+/* 以后在读数据的函数里,取回随身包继续用 */
+static int mpu6050_read_raw(/* ... */)
+{
+    struct mpu6050_data *data = /* 从 iio/client 取回那个随身包 */;
+    __be16 raw[3];
+    regmap_bulk_read(data->regmap, 0x3B, raw, sizeof(raw));
+}</pre>
+<p>所以 <code>data->regmap</code> = "从我的随身包里取出之前存好的那个句柄"。写成 <code>data->regmap</code> 还是裸 <code>map</code>,<b>传进函数的东西完全一样</b>(都是那个指针),只是存放位置不同。</p>
+
+<div class="pagebreak"></div>
+<h2>5　内存模型:在哪、能建几个、工厂是谁</h2>
+
+<h3>5.1 对象在哪:内核空间,内核堆</h3>
+<p>铁定在<b>内核空间的堆</b>上。原因链:你的驱动跑在内核态;<code>regmap_init</code> 内部用 <code>kzalloc()</code>(内核版 malloc)分配,给出的是<b>内核虚拟地址</b>;用户程序永远碰不到,要读传感器得通过 <code>/dev</code>、<code>/sys</code>、IIO 接口隔着一道墙,由内核在中间转一手。</p>
+<pre>┌─────────────── 用户空间 ───────────────┐
+│  你的 app:read()/cat /sys/...           │   ← 看不到 regmap
+└───────────────────┬────────────────────┘
+          system call│(陷入内核)
+┌───────────────────▼──── 内核空间 ───────┐
+│  你的驱动 + struct regmap 对象(kzalloc) │   ← regmap 住这儿
+│         └─► 通过总线 → MPU6050 硬件        │
+└─────────────────────────────────────────┘</pre>
+<p>地址长相类似 <code>0xffff8880_12340000</code>(内核态高地址),只在内核地址空间有意义。</p>
+
+<h3>5.2 建多个会怎样:各自独立,互不干扰</h3>
+<p>板子上两颗 MPU6050(0x68 和 0x69),probe 被调两次,各造一个 regmap:</p>
+<pre>内核堆:
+  ┌─ struct regmap #1 ─┐   绑定 0x68、自己的锁、自己的缓存
+  └────────────────────┘
+  ┌─ struct regmap #2 ─┐   绑定 0x69、另一把锁、另一份缓存
+  └────────────────────┘
+  只有一份 const config(只读图纸,两次共用没关系——工厂只是照着抄)</pre>
+<ul>
+<li>两个对象是<b>两块不同内存</b>,<code>dataA->regmap != dataB->regmap</code>(两个不同指针)。</li>
+<li>各带<b>独立的锁和缓存</b>:对 0x68 的操作不会阻塞 0x69。</li>
+<li><code>const config</code> 图纸可被多颗同型号芯片<b>共享复用</b>。</li>
+<li>靠不同指针区分操作对象:<code>regmap_read(dataA->regmap, ...)</code> 动 0x68,<code>regmap_read(dataB->regmap, ...)</code> 动 0x69。</li>
+</ul>
+
+<h3>5.3 "工厂"到底是谁</h3>
+<p><code>devm_regmap_init_i2c</code> 只是<b>前台接待</b>,真正 <code>kzalloc</code> 造对象的在更深一层。完整调用链:</p>
+<pre>devm_regmap_init_i2c(client, config)                 ← 你调用(宏,入口)
+        │
+  __devm_regmap_init_i2c(...)            regmap-i2c.c
+        │  ① regmap_get_i2c_bus():挑一套"I2C 总线读写回调"(struct regmap_bus)
+        ▼
+  __devm_regmap_init(dev, bus, ...)      登记"设备卸载时自动释放"
+        │
+        ▼
+  __regmap_init(dev, bus, ..., config)   ★真正的工厂★  regmap.c
+        │  ② map = kzalloc(sizeof(*map), GFP_KERNEL);  ← 对象在这里诞生
+        │  ③ 把 config 的 reg_bits/val_bits/max_register 拷进 map
+        │  ④ 把 bus 的读写回调绑进 map->reg_read / map->reg_write
+        │  ⑤ mutex_init(&map->mutex);  建缓存、建 debugfs...
+        ▼
+  return map;   ← 把新内存地址一路返回给你</pre>
+<table>
+<tr><th>层</th><th>文件</th><th>干什么</th></tr>
+<tr><td><code>devm_regmap_init_i2c</code>(前台)</td><td>regmap-i2c.c</td><td>入口,给你用的名字</td></tr>
+<tr><td><code>regmap_get_i2c_bus</code></td><td>regmap-i2c.c</td><td>提供"I2C 专用"的总线读写函数(换 SPI 就是 regmap-spi.c 提供 SPI 版)</td></tr>
+<tr><td><b><code>__regmap_init</code></b></td><td><b>regmap.c</b></td><td><b>真正的工厂:kzalloc 造对象、拷 config、绑回调、初始化锁和缓存</b></td></tr>
+</table>
+<blockquote><b>"最终工厂" = <code>drivers/base/regmap/regmap.c</code> 里的 <code>__regmap_init()</code></b>,总线无关的核心。<code>devm_regmap_init_i2c/_spi/_mmio</code> 只是不同总线的入口,各自塞进"本总线怎么发时序"的回调,再汇流到 <code>__regmap_init</code>。这也是"换总线只改一个函数名"的原因:99% 的工作在共用的 <code>__regmap_init</code> 里。</blockquote>
+
+<div class="pagebreak"></div>
+<h2>6　max_register 到底什么意思</h2>
+
+<p><b>一句话:这颗芯片最大的、有效的寄存器地址编号。</b> MPU6050 内部寄存器地址从 0x00 排到 0x75(WHO_AM_I),<code>0x75</code> 就是最后一个,所以 <code>max_register = 0x75</code>。这个值来自<b>芯片数据手册的寄存器映射表</b>,不是拍脑袋定的。</p>
+
+<p>告诉 regmap 这个边界,它用来干三件事:</p>
+<ul>
+<li><b>挡住越界访问</b>:你不小心 <code>regmap_read(map, 0x99, ...)</code>(超过 0x75),regmap 可直接拦下返回错误,而不是去总线读一个不存在的寄存器拿回垃圾。</li>
+<li><b>决定缓存 / debugfs 范围</b>:缓存数组按 0x00~max_register 开大小;<code>/sys/kernel/debug/regmap/.../registers</code> 也只 dump 到 max_register。</li>
+<li><b>配合 readable_reg/writeable_reg 回调</b>界定合法区间。</li>
+</ul>
+
+<p>填错的后果:</p>
+<table>
+<tr><th>情况</th><th>后果</th></tr>
+<tr><td>填小了(如 0x50)</td><td>0x50 以上的寄存器可能被判为非法,读写被拒,功能缺失</td></tr>
+<tr><td>填大了(如 0xFF)</td><td>缓存/debugfs 多覆盖芯片其实没有的地址,dump 时读到无意义值或总线报错</td></tr>
+</table>
+<blockquote>类比:一本书有 118 页(0x00~0x75)。<code>max_register = 0x75</code> 就是告诉图书管理员(regmap):"这本书最后一页是第 0x75 页,别让人翻到 0x76 页——那页不存在。"</blockquote>
+
+<div class="pagebreak"></div>
+<h2>7　速查总表</h2>
+<pre>// 造句柄(第一参数是 client/config,因为还没有 regmap)
+map = devm_regmap_init_i2c(client, &config);
+
+// 之后全部以 map 句柄打头:
+regmap_read       (map, reg, &val);          // 读→用 & 接收(数据是输出参数)
+regmap_write      (map, reg,  val);          // 写→直接给值
+regmap_update_bits(map, reg, mask, val);     // 改指定位(读-改-写,带锁)
+regmap_bulk_read  (map, reg, buf, count);    // 连读多个连续寄存器</pre>
+<table>
+<tr><th>要点</th><th>记忆</th></tr>
+<tr><td>第一个参数 map</td><td>身份证,告诉函数操作哪颗芯片;不给就不知道对谁下手</td></tr>
+<tr><td>读 vs 写</td><td>读用 <code>&val</code>(给地址接数据),写用 <code>val</code>(直接给值);返回值一律是错误码,不是数据</td></tr>
+<tr><td>config vs regmap</td><td>config 是公开的只读图纸;regmap 是内核堆上不透明的对象,你只有指针</td></tr>
+<tr><td>data->regmap</td><td>只是把句柄存在私有结构里,方便 probe 之后的函数继续用</td></tr>
+<tr><td>工厂</td><td>前台 devm_regmap_init_i2c → 核心 __regmap_init(真正 kzalloc)</td></tr>
+<tr><td>max_register</td><td>最后一个有效寄存器地址,当合法上界;查数据手册</td></tr>
+</table>
+
+<p style="text-align:center;color:#888;margin-top:30px;">—— 完 ——</p>
+
+</body>
+</html>
