@@ -12,6 +12,7 @@
 | 04 | [从零手写操作手册](04-从零手写操作手册.pdf) | **动手实操**:在 VM 上用 i2c-stub,从 hello 模块 → i2c 骨架 → probe → regmap/WHO_AM_I → 注册 IIO → 通道/read_raw → scale,每步命令+代码+原理,附完整最终代码与常见坑 |
 | 05 | [regmap 深入理解](05-regmap深入理解.pdf) | **专题精讲**:`regmap_config`(图纸)vs `struct regmap`(机器)的本质、"第一个参数永远是句柄"的套路、`read/write/update_bits/bulk_read` 每个参数为什么这么传、`data->regmap` 存哪、对象在内核堆、建多个互不干扰、工厂 `__regmap_init`、`max_register` 的含义 |
 | 06 | [IIO 的 fops 在哪-源码实锤](06-IIO的fops在哪-源码实锤.pdf) | **源码级**:为什么 IIO 驱动里看不到 `file_operations`?带你读内核 `industrialio-core.c`——`iio_read_channel_info`(:630)如何回调你的 `read_raw`(:646)、它被设成属性的 `.show`(:1068)、以及 `/dev/iio:deviceN` 的 `iio_buffer_fileops`(:1605)。证明"壳在内核、肉在你" |
+| 07 | [驱动结构-数据存哪-关键结构体](07-驱动结构-数据存哪-关键结构体.pdf) | **结构化整理**:一段话总结全流程、驱动文件的 10 块主要内容(含书写顺序)、**数据到底存在哪里**(芯片寄存器/内核堆私有数据/瞬时 *val 三处)、附录精讲三大结构体 `i2c_client`/`iio_dev`/`regmap`(各自代表什么、从哪来、关键字段、存哪) |
 
 ## 两个最该先建立的心智模型
 

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="500" viewBox="0 0 820 500" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs>
+    <marker id="b" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#c0392b"/></marker>
+    <marker id="g" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#1e8449"/></marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="498" fill="#fff" stroke="#d0d7de"/>
+  <text x="410" y="30" text-anchor="middle" font-size="19" font-weight="bold" fill="#0b3d91">数据到底存在哪里?(三个地方,各管各的)</text>
+
+  <!-- 1 chip registers -->
+  <rect x="40" y="70" width="230" height="170" rx="10" fill="#fdeaea" stroke="#c0392b" stroke-width="2"/>
+  <text x="155" y="94" text-anchor="middle" font-size="13" font-weight="bold" fill="#c0392b">① 芯片内部寄存器</text>
+  <text x="155" y="116" text-anchor="middle" font-size="11" fill="#333">MPU6050 里 0x3B.. 等寄存器</text>
+  <text x="155" y="138" text-anchor="middle" font-size="11" fill="#333">存"真实测量值"</text>
+  <text x="155" y="160" text-anchor="middle" font-size="11" fill="#333">硬件实时更新</text>
+  <rect x="70" y="176" width="170" height="46" rx="5" fill="#fff" stroke="#c0392b"/>
+  <text x="155" y="195" text-anchor="middle" font-size="10" fill="#555">加速度 X 高/低字节…</text>
+  <text x="155" y="213" text-anchor="middle" font-size="10" fill="#c0392b">驱动【不保存】副本</text>
+
+  <!-- 2 kernel heap -->
+  <rect x="300" y="70" width="290" height="250" rx="10" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="445" y="94" text-anchor="middle" font-size="13" font-weight="bold" fill="#0b3d91">② 内核堆(驱动的持久状态)</text>
+  <rect x="320" y="108" width="250" height="88" rx="6" fill="#fff" stroke="#5b8def"/>
+  <text x="445" y="127" text-anchor="middle" font-size="11" font-weight="bold">devm_iio_device_alloc 的一整块</text>
+  <rect x="332" y="136" width="110" height="48" rx="4" fill="#e8eef8" stroke="#0b3d91"/><text x="387" y="156" text-anchor="middle" font-size="10">struct iio_dev</text><text x="387" y="172" text-anchor="middle" font-size="9" fill="#555">(IIO 核心用)</text>
+  <rect x="448" y="136" width="110" height="48" rx="4" fill="#fff6ea" stroke="#b9770e"/><text x="503" y="153" text-anchor="middle" font-size="10">私有数据</text><text x="503" y="169" text-anchor="middle" font-size="9" fill="#555">mpu6050_data</text>
+  <text x="445" y="210" text-anchor="middle" font-size="10" fill="#0b3d91">iio_priv() 取私有部分</text>
+  <rect x="332" y="222" width="226" height="40" rx="5" fill="#fff6ea" stroke="#b9770e"/>
+  <text x="445" y="240" text-anchor="middle" font-size="10">data-&gt;regmap 指针 ──┐</text>
+  <text x="445" y="256" text-anchor="middle" font-size="9" fill="#555">存"怎么访问芯片"的句柄,不是测量值</text>
+  <rect x="332" y="272" width="226" height="38" rx="5" fill="#f7f0ff" stroke="#7d3c98"/>
+  <text x="445" y="295" text-anchor="middle" font-size="10">└→ struct regmap 对象(抽象句柄,亦在内核堆)</text>
+
+  <!-- 3 transient -->
+  <rect x="620" y="70" width="160" height="170" rx="10" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="700" y="94" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e8449">③ 瞬时值</text>
+  <text x="700" y="118" text-anchor="middle" font-size="11" fill="#333">read_raw 里的 *val</text>
+  <text x="700" y="140" text-anchor="middle" font-size="11" fill="#333">读一次、返回一次</text>
+  <text x="700" y="162" text-anchor="middle" font-size="11" fill="#333">不留存</text>
+  <text x="700" y="192" text-anchor="middle" font-size="10" fill="#1e8449">内核格式化成字符串</text>
+  <text x="700" y="210" text-anchor="middle" font-size="10" fill="#1e8449">经 sysfs 给用户 cat</text>
+
+  <!-- arrows -->
+  <line x1="270" y1="199" x2="330" y2="245" stroke="#c0392b" stroke-width="2" marker-end="url(#b)"/>
+  <text x="300" y="215" text-anchor="middle" font-size="9" fill="#c0392b">regmap_read 取</text>
+  <line x1="560" y1="150" x2="620" y2="150" stroke="#1e8449" stroke-width="2" marker-end="url(#g)"/>
+  <text x="590" y="142" text-anchor="middle" font-size="9" fill="#1e8449">写 *val</text>
+
+  <rect x="40" y="340" width="740" height="140" rx="8" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="410" y="364" text-anchor="middle" font-size="13" font-weight="bold" fill="#0b3d91">一句话:三类"数据"分别住在三处</text>
+  <text x="60" y="390" font-size="11.5" fill="#333">· 测量数据(加速度值):住在【芯片寄存器】,硬件实时更新;驱动每次现读现返回,不保存副本。</text>
+  <text x="60" y="414" font-size="11.5" fill="#333">· 驱动的持久状态(regmap 句柄、配置):住在【内核堆】的私有数据 mpu6050_data 里,iio_priv() 存取。</text>
+  <text x="60" y="438" font-size="11.5" fill="#333">· 读出来的值:只是 read_raw 里的【瞬时 *val】,写回后由内核格式化成字符串经 sysfs 交给用户。</text>
+  <text x="60" y="462" font-size="11" fill="#555">· regmap 是"抽象句柄":你只持有一个指针,通过 regmap_read/write 操作,看不到它内部字段。</text>
+</svg>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>IIO 驱动文件结构 · 数据存哪 · 关键结构体</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.8pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:94%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .sum { border:2px solid #0b3d91; background:#eef4ff; border-radius:8px; padding:10px 14px; margin:10px 0; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:23pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">IIO 驱动:流程总结 · 文件主要内容<br>数据存哪 · 关键结构体</div>
+  <div class="sub">MPU-6050 IIO 驱动学习 · 结构化整理</div>
+  <div class="sub" style="margin-top:80px;font-size:12pt;">配套仓库 github.com/fyy0619-cell/xiangmu · 2026 年 9 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、一段话总结整个流程</h2>
+<div class="sum">
+设备出现(由<b>设备树</b>或 <b>i2c-stub + new_device</b> 把硬件登记到 I2C 总线)→ <b>i2c-core</b> 用 <code>compatible</code> 或名字把"设备"和"驱动"<b>匹配</b>上 → 匹配成功后内核<b>自动调用驱动的 <code>probe()</code></b> → probe 里完成<b>三件事</b>:① 用 <code>devm_iio_device_alloc</code> 分配 <code>iio_dev</code> + 私有数据;② 用 <code>regmap</code> 建立寄存器访问通道、读 <code>WHO_AM_I</code> 认芯片、唤醒;③ 填好 <code>iio_dev</code> 并 <code>devm_iio_device_register</code> 注册,挂上<b>通道</b>与 <code>read_raw</code> 回调。此后用户 <code>cat</code> 某个通道属性时,IIO 核心<b>回调 <code>read_raw</code></b>,驱动用 regmap <b>现读</b>芯片寄存器、把值写回并经 sysfs 返回给用户。
+<br><br><b>一句话:驱动是一座"待命 → 被匹配 → 在 probe 里开好柜台 → 被回调时现取现供"的桥。</b>
+</div>
+
+<h2>二、驱动文件的主要内容(按书写/阅读顺序)</h2>
+<p>一个标准 i2c + IIO 驱动文件,主体就是下面这几块,顺序基本固定:</p>
+<table>
+  <tr><th>#</th><th>组成部分</th><th>作用(一句话)</th></tr>
+  <tr><td>1</td><td>头文件 + 寄存器宏</td><td>引入 module/i2c/regmap/iio;定义芯片寄存器地址</td></tr>
+  <tr><td>2</td><td><code>struct 私有数据</code></td><td>存这台设备自己的状态(regmap 句柄、配置…)</td></tr>
+  <tr><td>3</td><td><code>regmap_config</code></td><td>告诉 regmap 寄存器几位、数据几位</td></tr>
+  <tr><td>4</td><td>通道数组 <code>iio_chan_spec[]</code></td><td>声明"能测什么量",决定生成哪些 sysfs 属性</td></tr>
+  <tr><td>5</td><td><code>read_raw</code> 回调</td><td>用户读某通道时,去芯片取数据返回(按 mask 分 RAW/SCALE)</td></tr>
+  <tr><td>6</td><td><code>struct iio_info</code></td><td>回调表,把 read_raw 交给 IIO 核心</td></tr>
+  <tr><td>7</td><td><code>probe()</code></td><td>分配 → 初始化(regmap/WHO_AM_I/唤醒)→ 注册 IIO</td></tr>
+  <tr><td>8</td><td>匹配表 <code>id_table</code> / <code>of_match_table</code></td><td>声明"我认得哪些设备"</td></tr>
+  <tr><td>9</td><td><code>struct i2c_driver</code> + <code>module_i2c_driver</code></td><td>驱动"名片"并注册到 i2c 总线</td></tr>
+  <tr><td>10</td><td><code>MODULE_*</code></td><td>许可、作者、描述</td></tr>
+</table>
+<div class="key"><b>书写顺序建议</b>:先写 1、8、9、10 搭空骨架让 probe 空跑通 → 再往 probe(7)里按"分配→初始化→注册"增量填 → 最后写 4、5、6 让数据能被读出来。<b>每填一块就编译加载验证一次。</b></div>
+
+<div class="pagebreak"></div>
+<h2>三、数据到底存在哪里(重点)</h2>
+<p>初学者最容易糊涂的是"传感器的数据到底存在驱动里的哪个变量"。<b>答案是:测量数据根本不存在驱动里。</b>要分三处看(图 1)。</p>
+<figure><img src="figures/fig_where.png" alt="数据存哪"><figcaption>图 1　三类"数据"分别住在三处</figcaption></figure>
+<ul>
+  <li><b>① 测量数据(加速度值)→ 住在芯片寄存器</b>(如 <code>0x3B</code> 起)。由硬件实时更新。驱动<b>不保存副本</b>,每次被读时用 regmap <b>现读现返回</b>。</li>
+  <li><b>② 驱动的持久状态 → 住在内核堆的"私有数据" <code>struct mpu6050_data</code></b>。它和 <code>iio_dev</code> 由 <code>devm_iio_device_alloc</code> <b>一整块</b>分配在内核堆;里面存的是 <code>regmap</code> 句柄、配置等"<b>怎么访问芯片</b>"的信息,<b>不是测量值</b>。用 <code>iio_priv()</code> 存取。</li>
+  <li><b>③ 读出来的值 → 只是 <code>read_raw</code> 里的瞬时 <code>*val</code></b>。读一次、写回一次,不留存;内核把它格式化成字符串经 sysfs 交给用户。</li>
+</ul>
+<div class="key">所以 <code>data-&gt;regmap</code> 存的不是数据,是"<b>读数据的通道</b>";真正的数据在芯片里,读出来的值是过路的瞬时值。这也是为什么这个(direct 模式)驱动里<b>没有</b>一个"保存加速度的数组"——不需要,现读即可。(若要连续高速采集,才用"触发缓冲"在内核里开 kfifo,那是进阶内容。)</div>
+
+<div class="pagebreak"></div>
+<h2>附录　三个关键结构体</h2>
+<p>驱动里反复出现三个指针:<code>i2c_client *client</code>、<code>iio_dev *indio_dev</code>、<code>regmap *regmap</code>。搞懂它们各代表什么、从哪来、存在哪,代码就不再是"黑话"。</p>
+
+<h3>A. <code>struct i2c_client *client</code> —— "总线上这颗具体芯片"的把手</h3>
+<ul>
+  <li><b>代表什么</b>:挂在某条 I2C 总线上的<b>一个具体从设备</b>(就是你的 MPU6050)。</li>
+  <li><b>从哪来</b>:设备出现时由 <b>i2c 核心创建</b>并作为参数传进你的 <code>probe(client, id)</code>。你不分配它。</li>
+  <li><b>关键字段</b>:
+    <ul>
+      <li><code>client->addr</code> —— 7 位从设备地址(如 <code>0x68</code>)。</li>
+      <li><code>client->adapter</code> —— 它挂在哪条 I2C 总线(适配器);实际收发经它。</li>
+      <li><code>client->dev</code> —— 内嵌的通用 <code>struct device</code>:打日志 <code>dev_info(&amp;client->dev, ...)</code>、申请 devm 资源、取设备树节点都用它。</li>
+      <li><code>client->irq</code> —— 该设备的中断号(若接了中断)。</li>
+    </ul>
+  </li>
+  <li><b>你怎么用它</b>:把它交给 <code>devm_regmap_init_i2c(client, &amp;cfg)</code> 建 regmap;用 <code>&amp;client->dev</code> 做各种 devm_/日志调用。</li>
+  <li><b>一句话</b>:client = "驱动和这颗具体芯片对话的把手"(在哪条总线、什么地址)。</li>
+</ul>
+
+<h3>B. <code>struct iio_dev *indio_dev</code> —— "一个 IIO 设备"的登记表</h3>
+<ul>
+  <li><b>代表什么</b>:IIO 子系统眼里的<b>一个传感器设备</b>;是你和 IIO 核心之间的句柄。</li>
+  <li><b>从哪来</b>:<code>devm_iio_device_alloc(&amp;client->dev, sizeof(私有数据))</code> 分配(连同私有数据一整块)。</li>
+  <li><b>你要填的关键字段</b>:
+    <ul>
+      <li><code>->name</code> —— 设备名(=&gt; <code>/sys/.../name</code>)。</li>
+      <li><code>->modes</code> —— 工作模式,如 <code>INDIO_DIRECT_MODE</code>(直接读)。</li>
+      <li><code>->info</code> —— 指向 <code>iio_info</code> 回调表(含 <code>read_raw</code>)。</li>
+      <li><code>->channels</code> / <code>->num_channels</code> —— 通道数组与数量(能测什么量)。</li>
+    </ul>
+  </li>
+  <li><b>内部(你不直接碰)</b>:它内部带着"私有数据区"(用 <code>iio_priv(indio_dev)</code> 取)和设备模型的 <code>struct device</code>。</li>
+  <li><b>注册后</b>:对应 <code>/sys/bus/iio/devices/iio:deviceN</code>。</li>
+  <li><b>一句话</b>:indio_dev = "把你的传感器登记进 IIO 的那张表 + 一块随它分配的私有数据"。</li>
+</ul>
+
+<h3>C. <code>struct regmap *regmap</code> —— 读写寄存器的"抽象句柄"</h3>
+<ul>
+  <li><b>代表什么</b>:一条"读写某芯片寄存器"的<b>抽象通道</b>。它把"读/写寄存器"与具体总线(I2C/SPI)<b>解耦</b>。</li>
+  <li><b>为什么叫"抽象"</b>:<code>struct regmap</code> 是<b>不透明类型</b>——它的内部字段定义藏在内核内部,<b>你拿到的只是一个指针,不能直接访问它的成员</b>,只能通过函数操作它:
+    <ul>
+      <li><code>regmap_read(regmap, reg, &amp;val)</code> / <code>regmap_write(regmap, reg, val)</code></li>
+      <li><code>regmap_update_bits(regmap, reg, mask, val)</code>(只改某几位)</li>
+      <li><code>regmap_bulk_read(regmap, reg, buf, n)</code>(连读多个)</li>
+    </ul>
+    注意:这些 API <b>第一个参数永远是 regmap 句柄</b>——意思是"在这条通道上做这件事"。</li>
+  <li><b>从哪来</b>:<code>devm_regmap_init_i2c(client, &amp;mpu6050_regmap_config)</code>。它内部记住了 <code>client</code>(走哪条总线、哪个地址)和 config(<code>reg_bits</code>/<code>val_bits</code>/<code>max_register</code>)。</li>
+  <li><b>存在哪</b>:regmap 对象本身也在内核堆(devm 分配、自动释放);你把它的<b>指针</b>存进私有数据 <code>data->regmap</code>,probe 存、read_raw 取。</li>
+  <li><b>一句话</b>:regmap = "一个只给你函数、不给你内部的读写通道把手";你调 <code>regmap_read</code>,它底层替你发 I2C 事务。</li>
+</ul>
+
+<div class="key">三者关系:<b>client</b>(哪颗芯片)→ 用它建 <b>regmap</b>(怎么读写这颗芯片)→ regmap 指针存进 <b>indio_dev</b> 的私有数据 → read_raw 回调里用 <code>iio_priv(indio_dev)</code> 取回 regmap 去读芯片。</div>
+
+<blockquote>本文确保与 Linux 5.4 IIO/i2c/regmap 实际语义一致。配套仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
