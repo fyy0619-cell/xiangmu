@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="540" viewBox="0 0 820 540" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="818" height="538" fill="#fff" stroke="#d0d7de"/>
+  <text x="410" y="30" text-anchor="middle" font-size="19" font-weight="bold" fill="#0b3d91">IIO 的 fops 在哪:两条路径都"壳在内核、肉在你"</text>
+
+  <!-- legend -->
+  <rect x="250" y="44" width="150" height="22" fill="#e8eef8" stroke="#0b3d91"/><text x="325" y="60" text-anchor="middle" font-size="11" fill="#0b3d91">内核 IIO 核心写的</text>
+  <rect x="430" y="44" width="140" height="22" fill="#fff6ea" stroke="#b9770e"/><text x="500" y="60" text-anchor="middle" font-size="11" fill="#b9770e">你写的</text>
+
+  <!-- sysfs path -->
+  <text x="235" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e8449">路径①:sysfs(cat 属性)</text>
+  <rect x="70" y="104" width="330" height="40" rx="6" fill="#eaf7ea" stroke="#1e8449"/><text x="235" y="129" text-anchor="middle" font-size="12">cat in_accel_x_raw(用户/应用)</text>
+  <rect x="70" y="160" width="330" height="54" rx="6" fill="#e8eef8" stroke="#0b3d91"/><text x="235" y="182" text-anchor="middle" font-size="11.5" fill="#0b3d91">iio_read_channel_info()</text><text x="235" y="200" text-anchor="middle" font-size="10" fill="#555">industrialio-core.c:630(属性的 .show)</text>
+  <rect x="70" y="230" width="330" height="54" rx="6" fill="#fff6ea" stroke="#b9770e"/><text x="235" y="252" text-anchor="middle" font-size="11.5" fill="#b9770e">你的 read_raw()</text><text x="235" y="270" text-anchor="middle" font-size="10" fill="#555">core.c:646 → info->read_raw(...)</text>
+  <rect x="70" y="300" width="330" height="40" rx="6" fill="#fdeaea" stroke="#c0392b"/><text x="235" y="325" text-anchor="middle" font-size="12">regmap 读芯片寄存器</text>
+
+  <!-- chardev path -->
+  <text x="585" y="92" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e8449">路径②:字符设备(缓冲流)</text>
+  <rect x="420" y="104" width="330" height="40" rx="6" fill="#eaf7ea" stroke="#1e8449"/><text x="585" y="129" text-anchor="middle" font-size="12">read(/dev/iio:device0)(应用)</text>
+  <rect x="420" y="160" width="330" height="54" rx="6" fill="#e8eef8" stroke="#0b3d91"/><text x="585" y="182" text-anchor="middle" font-size="11.5" fill="#0b3d91">iio_buffer_fileops</text><text x="585" y="200" text-anchor="middle" font-size="10" fill="#555">industrialio-core.c:1605(.read/.open/.ioctl)</text>
+  <rect x="420" y="230" width="330" height="54" rx="6" fill="#e8eef8" stroke="#0b3d91"/><text x="585" y="252" text-anchor="middle" font-size="11.5" fill="#0b3d91">IIO 缓冲机制(core 提供)</text><text x="585" y="270" text-anchor="middle" font-size="10" fill="#555">触发/缓冲把数据搬给用户</text>
+  <rect x="420" y="300" width="330" height="40" rx="6" fill="#fff6ea" stroke="#b9770e"/><text x="585" y="325" text-anchor="middle" font-size="12">你的触发回调(进阶,后面学)</text>
+
+  <g stroke="#0b3d91" stroke-width="2" marker-end="url(#a)">
+    <line x1="235" y1="144" x2="235" y2="160"/>
+    <line x1="235" y1="214" x2="235" y2="230"/>
+    <line x1="235" y1="284" x2="235" y2="300"/>
+    <line x1="585" y1="144" x2="585" y2="160"/>
+    <line x1="585" y1="214" x2="585" y2="230"/>
+    <line x1="585" y1="284" x2="585" y2="300"/>
+  </g>
+
+  <rect x="70" y="360" width="680" height="76" rx="8" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="410" y="384" text-anchor="middle" font-size="13" font-weight="bold" fill="#0b3d91">结论:fops / sysfs 的"壳"都在 IIO 核心(蓝色),是内核替你写的</text>
+  <text x="410" y="406" text-anchor="middle" font-size="12" fill="#333">你只写了"肉"(橙色):read_raw —— 怎么读这颗芯片的数据</text>
+  <text x="410" y="426" text-anchor="middle" font-size="11" fill="#555">对比 led.c:那张 file_operations 是你亲手写的;这里它在 core.c:1605</text>
+
+  <text x="410" y="470" text-anchor="middle" font-size="11" fill="#777">参数对照:框架传 chan(this_attr->c)与 mask(this_attr->address),你填 val/val2</text>
+</svg>

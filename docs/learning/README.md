@@ -11,6 +11,7 @@
 | 03 | [驱动到底要做什么](03-驱动到底要做什么.pdf) | 驱动的三件事(匹配/初始化/开接口)、"驱动是桥"、以及**驱动与应用的分工**(它们是分开的) |
 | 04 | [从零手写操作手册](04-从零手写操作手册.pdf) | **动手实操**:在 VM 上用 i2c-stub,从 hello 模块 → i2c 骨架 → probe → regmap/WHO_AM_I → 注册 IIO → 通道/read_raw → scale,每步命令+代码+原理,附完整最终代码与常见坑 |
 | 05 | [regmap 深入理解](05-regmap深入理解.pdf) | **专题精讲**:`regmap_config`(图纸)vs `struct regmap`(机器)的本质、"第一个参数永远是句柄"的套路、`read/write/update_bits/bulk_read` 每个参数为什么这么传、`data->regmap` 存哪、对象在内核堆、建多个互不干扰、工厂 `__regmap_init`、`max_register` 的含义 |
+| 06 | [IIO 的 fops 在哪-源码实锤](06-IIO的fops在哪-源码实锤.pdf) | **源码级**:为什么 IIO 驱动里看不到 `file_operations`?带你读内核 `industrialio-core.c`——`iio_read_channel_info`(:630)如何回调你的 `read_raw`(:646)、它被设成属性的 `.show`(:1068)、以及 `/dev/iio:deviceN` 的 `iio_buffer_fileops`(:1605)。证明"壳在内核、肉在你" |
 
 ## 两个最该先建立的心智模型
 

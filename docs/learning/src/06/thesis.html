@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>IIO 的 fops / read_raw 在内核哪里 —— 源码实锤</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.75; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.8pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:88%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:23pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">IIO 的 fops / read_raw 在内核哪里<br><span style="font-size:15pt;color:#555;">—— 源码实锤:为什么你的驱动里看不到 file_operations</span></div>
+  <div class="sub">基于 Linux 5.4 内核源码 drivers/iio/industrialio-core.c</div>
+  <div class="sub" style="margin-top:80px;font-size:12pt;">MPU-6050 IIO 驱动学习 · 2026 年 9 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、问题</h2>
+<p>在经典字符设备驱动(如 LED)里,你要亲手写 <code>file_operations</code>(<code>.open</code>/<code>.read</code>/<code>.write</code>)、<code>register_chrdev</code>、建 <code>/dev</code> 节点。但在我们的 MPU-6050 <b>IIO 驱动</b>里,<b>整份代码看不到一个 file_operations</b>,只写了 <code>read_raw</code> 和通道数组。这是为什么?数据到底怎么从用户的 <code>cat</code> 流到你的芯片?</p>
+<div class="key">答案:<b>fops 不是不存在,而是 IIO 子系统替你写好了,住在内核源码里,不在你的驱动里。</b>你只需提供"芯片特有的那块回调"(<code>read_raw</code>),框架的 fops/sysfs 外壳会在需要数据时回调它。</div>
+
+<h2>二、调用链全貌</h2>
+<figure><img src="figures/fig_fops.png" alt="fops调用链"><figcaption>图 1　两条路径:外壳(fops/sysfs)在 IIO 核心,数据回调(read_raw)在你的驱动</figcaption></figure>
+
+<div class="pagebreak"></div>
+<h2>三、源码实锤(Linux 5.4, drivers/iio/industrialio-core.c)</h2>
+
+<h3>3.1 你 cat 属性时,真正执行的是内核的 iio_read_channel_info()</h3>
+<p>第 630 行起,这个函数是每个通道属性(如 <code>in_accel_x_raw</code>)的 <code>.show</code> 处理函数——<b>内核写的</b>:</p>
+<pre>630  static ssize_t iio_read_channel_info(struct device *dev,
+631                       struct device_attribute *attr, char *buf)
+632  {
+634      struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+635      struct iio_dev_attr *this_attr = to_iio_dev_attr(attr);
+...
+646      ret = indio_dev->info->read_raw(indio_dev, this_attr->c,
+647              &vals[0], &vals[1], this_attr->address);   // ← 回调【你的】read_raw
+...
+652      return iio_format_value(buf, ret, val_len, vals);   // 把值格式化成字符串给用户
+653  }</pre>
+<p>第 646 行的 <code>indio_dev->info->read_raw(...)</code> —— <b>这就是在调用你写的 read_raw</b>。参数正好对上你的函数签名:</p>
+<table>
+  <tr><th>框架传入(内核)</th><th>你的 read_raw 形参</th><th>含义</th></tr>
+  <tr><td><code>this_attr->c</code></td><td><code>chan</code></td><td>哪个通道(accel-X…)</td></tr>
+  <tr><td><code>&amp;vals[0]</code> / <code>&amp;vals[1]</code></td><td><code>val</code> / <code>val2</code></td><td>你把结果写回这里</td></tr>
+  <tr><td><code>this_attr->address</code></td><td><code>mask</code></td><td>要 RAW 还是 SCALE</td></tr>
+</table>
+
+<h3>3.2 iio_read_channel_info 被设成通道属性的 .show</h3>
+<p>第 1068 行,框架在"自动生成通道属性"时,把上面这个函数挂成了属性的 <code>.show</code>:</p>
+<pre>1068        &iio_read_channel_info,   // 生成的 in_accel_*_raw 等属性的 .show 回调</pre>
+<p>所以链路是:<code>cat in_accel_x_raw</code> → 内核 sysfs → <code>iio_read_channel_info</code>(.show)→ 你的 <code>read_raw</code>。</p>
+
+<h3>3.3 字符设备那套 file_operations(你问的 fops 本体)</h3>
+<p>第 1605 行,<code>/dev/iio:deviceN</code> 的 <code>file_operations</code>——同样是<b>内核写的</b>:</p>
+<pre>1605  static const struct file_operations iio_buffer_fileops = {
+1606      .read            = iio_buffer_read_first_n_outer_addr,
+1607      .release         = iio_chrdev_release,
+1608      .open            = iio_chrdev_open,
+1609      .poll            = iio_buffer_poll_addr,
+1612      .unlocked_ioctl  = iio_ioctl,
+1613      .compat_ioctl    = iio_ioctl,
+1614  };</pre>
+<div class="key"><code>.open / .read / .release / .poll / .ioctl</code> —— 这正是你在 LED 驱动里<b>亲手写</b>的那种 <code>file_operations</code>。区别只是:LED 里是你写的;IIO 里它在 <code>industrialio-core.c:1605</code>,内核替你写好了,你一个字没碰。</div>
+
+<div class="pagebreak"></div>
+<h2>四、和 LED 手动字符设备对照</h2>
+<table>
+  <tr><th></th><th>LED 手动字符设备</th><th>你的 IIO 驱动</th></tr>
+  <tr><td>file_operations</td><td>你写(.open/.read/.write)</td><td>内核写(core.c:1605 iio_buffer_fileops)</td></tr>
+  <tr><td>sysfs 属性的 .show</td><td>—(没用 sysfs)</td><td>内核写(core.c:630 iio_read_channel_info)</td></tr>
+  <tr><td>建 /dev 节点</td><td>你 register_chrdev / device_create</td><td>IIO 自动建 /dev/iio:deviceN</td></tr>
+  <tr><td>生成属性文件</td><td>—</td><td>IIO 按你的通道自动生成 in_accel_*_raw</td></tr>
+  <tr><td>你真正写的</td><td>全部管道</td><td>只有 iio_chan_spec + read_raw</td></tr>
+</table>
+
+<h2>五、结论</h2>
+<p>两条取数据的路径——sysfs(<code>cat</code> 属性)和字符设备(<code>read /dev/iio:deviceN</code>)——它们的"外壳"(fops、sysfs 的 show、建节点、生成属性)<b>全在 IIO 核心里,是内核替你写好的</b>。你的驱动只提供"芯片特有的那一小块":<code>read_raw</code>(怎么读这颗芯片的数据)。框架在需要数据时回调它。</p>
+<div class="key">一句话:<b>用子系统 = 继承一套现成的 fops/sysfs 外壳,你只实现"芯片特有的回调"。你代码里看不到 fops,不是没有,是你站在了框架的肩膀上。你的代码越少,越说明框架替你干得越多。</b></div>
+<p>想亲眼验证,在你的内核源码树里看这个文件即可:</p>
+<pre>drivers/iio/industrialio-core.c
+  :630   iio_read_channel_info()      # sysfs 读,回调你的 read_raw
+  :646   indio_dev->info->read_raw()  # 回调点
+  :1068  .show = &iio_read_channel_info
+  :1605  iio_buffer_fileops           # /dev/iio:deviceN 的 file_operations</pre>
+
+<blockquote>本文基于 Linux 5.4 内核源码(行号随版本略有差异)。配套仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
