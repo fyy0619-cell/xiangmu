@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>IIO 驱动两阶段逻辑 · read_raw · indio_dev 字段</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.8pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:94%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  .fix { border-left:4px solid #c0392b; background:#fdeeec; margin:9px 0; padding:7px 12px; color:#7a241b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:23pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">IIO 驱动:两阶段逻辑<br>+ read_raw + indio_dev 字段</div>
+  <div class="sub">把"设备怎么被驱动起来"和"数据怎么流出来"彻底分清</div>
+  <div class="sub" style="margin-top:80px;font-size:12pt;">MPU-6050 IIO 驱动学习 · 2026 年 9 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、两阶段逻辑(最重要)</h2>
+<p>IIO 驱动不是一条直线,而是<b>两个阶段</b>:启动时"搭好台子"(只跑一次),之后反复"唱戏"(每次读都跑)。把这两段分开,整个逻辑就严丝合缝了。</p>
+<figure><img src="figures/fig_twophase.png" alt="两阶段逻辑"><figcaption>图 1　IIO 驱动的两阶段逻辑</figcaption></figure>
+
+<h3>阶段一 · 启动/加载(只发生一次:把设备"驱动起来")</h3>
+<pre>开机 / 加载驱动(驱动 module_i2c_driver 注册,待命)
+  ① 设备树 / new_device 把"设备"登记到 I2C 总线   ← 有哪个设备、在哪、叫什么
+  ② i2c_core 用 compatible/名字 把设备和驱动匹配    ← 媒人撮合
+  ③ 匹配成功 → 内核自动调 probe(client)
+  ④ probe 内部:
+       a. 分配 iio_dev(+私有数据)
+       b. 用 client 建 regmap           ← regmap 在这里就建好,存进私有数据
+       c. 用 regmap 读 WHO_AM_I、唤醒芯片(初始化)
+       d. 填 iio_dev 字段 + iio_device_register(注册,生成 /sys 属性)
+  设备就绪,"待命"。probe 返回,阶段一结束。</pre>
+
+<h3>阶段二 · 运行/读数据(之后每次用户 cat 都发生一次)</h3>
+<pre>⑤ 用户 cat in_accel_x_raw
+⑥ IIO 核心回调你的 read_raw
+⑦ read_raw 用【阶段一建好的】regmap 读芯片寄存器
+⑧ 返回数值 → 内核格式化 → 用户看到</pre>
+
+<div class="fix"><b>两个容易搞反的点(修正):</b><br>
+1. <b>设备树在 i2c_core 之前/被它使用</b>:设备树是"有哪个设备"的来源,i2c_core 拿它去匹配。顺序是 <b>设备树 → i2c_core 匹配</b>,不是反过来。<br>
+2. <b>regmap 不在 read_raw 之后</b>:regmap 在 <b>probe 里就建好</b>并存进私有数据;read_raw 只是把它<b>取出来用</b>。</div>
+
+<div class="key"><b>关键区别(记住就不混):</b>
+<ul>
+  <li><b>probe 只跑一次</b>(设备被驱动起来那一刻);<b>read_raw 每次读都跑</b>。</li>
+  <li><b>regmap 在 probe 里"建"一次</b>(存进私有数据),<b>read_raw 里"用"很多次</b>(靠 <code>iio_priv</code> 取回)。</li>
+  <li><b>iio_dev 在 probe 里分配并注册</b>;<b>read_raw 是注册时登记的回调</b>,在阶段二被框架调用。</li>
+</ul>
+一句话:<b>启动时搭好台子(probe)→ 之后反复唱戏(read_raw)。</b></div>
+
+<div class="pagebreak"></div>
+<h2>二、read_raw 干嘛、为什么非要它</h2>
+<p>一句话:<b>read_raw 是"真正去芯片里把数值取出来"的那个函数。框架负责接待客人,但它不会读你这颗芯片——只有你写的 read_raw 会。</b></p>
+<figure><img src="figures/fig_chef.png" alt="read_raw角色"><figcaption>图 2　read_raw 的角色:框架是服务员,read_raw 是厨师</figcaption></figure>
+<ul>
+  <li><b>IIO 框架 = 服务员</b>:负责"点菜(cat 属性)"和"上菜(格式化返回)"。这套通用流程(fops/sysfs)内核都写好了。</li>
+  <li><b>read_raw = 厨师</b>:真正做菜——去芯片寄存器读数值。<b>框架不会做你这道菜</b>(不懂你芯片的寄存器),只有你会。</li>
+  <li><b>没有 read_raw</b>:属性文件还在,但用户 cat 时框架没厨师可喊,<b>端不出数据</b>。read_raw 是数值的唯一来源。</li>
+  <li><b>为什么是回调</b>:你不自己调它,而是把它<b>登记</b>给框架(<code>iio_info.read_raw</code>);用户一点菜,框架就<b>回调</b>它(控制反转)。</li>
+  <li><b>参数就是点菜单</b>:框架传 <code>chan</code>(哪个通道)+ <code>mask</code>(要 raw 还是 scale),你照单取值写回 <code>*val</code>。所以一个 read_raw 用 <code>switch</code> 应付所有通道、所有类型。</li>
+</ul>
+
+<div class="pagebreak"></div>
+<h2>三、probe 里填 indio_dev 的字段,是"告诉谁"</h2>
+<p>probe 里这几行:</p>
+<pre>indio_dev->name = "mpu6050";
+indio_dev->modes = INDIO_DIRECT_MODE;
+indio_dev->info = &mpu6050_info;
+indio_dev->channels = mpu6050_channels;
+indio_dev->num_channels = ARRAY_SIZE(mpu6050_channels);</pre>
+<p><b>是填给 IIO 核心(框架)看的。</b><code>indio_dev</code> 是你交给框架的一张"登记表";你填字段=往表上写内容;<b>注册那一刻(<code>devm_iio_device_register</code>)框架才去读这些字段</b>(在此之前只是给内存赋值,没人看)。</p>
+<table>
+  <tr><th>你填的字段</th><th>框架读到后做什么(比喻)</th></tr>
+  <tr><td><code>->name</code></td><td>生成 <code>/sys/.../name</code>,内容就是它;标识设备。(招牌/店名)</td></tr>
+  <tr><td><code>->modes</code></td><td>记下取数方式。<code>DIRECT_MODE</code>=支持 sysfs 直接读;要做缓冲流式需加 <code>INDIO_BUFFER_*</code>。(营业方式)</td></tr>
+  <tr><td><code>->info</code></td><td>记下你的回调表地址;用户读时顺着它找到并调用 <code>info->read_raw</code>。(后厨联系人)</td></tr>
+  <tr><td><code>->channels</code> / <code>->num_channels</code></td><td>遍历通道数组,按每个通道的 type/方向/info_mask <b>自动生成 sysfs 属性文件</b>,并决定回调 read_raw 时传哪个 <code>chan</code>/<code>mask</code>。(菜单)</td></tr>
+</table>
+<pre>你填 indio_dev 各字段(写登记表)
+        │
+devm_iio_device_register(indio_dev)   ← 把表交给 IIO 核心
+        ├─ 按 name 建 /sys/.../name
+        ├─ 按 channels 自动生成 in_accel_x_raw 等属性
+        └─ 记住 info->read_raw,等用户来读时回调它</pre>
+<div class="key">所以内核源码里 <code>iio_read_channel_info</code> 调的 <code>indio_dev->info->read_raw(... chan ... mask ...)</code>,它调的 read_raw、传的 chan,正是你在这几行里填进 <code>->info</code> 和 <code>->channels</code> 的东西。</div>
+
+<blockquote>本文承接"read_raw 是什么"这一问的梳理。配套代码 <code>examples/learning-driver/</code>;完整系列见 <code>docs/learning/</code>。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
