@@ -13,6 +13,9 @@
 | 05 | [regmap 深入理解](05-regmap深入理解.pdf) | **专题精讲**:`regmap_config`(图纸)vs `struct regmap`(机器)的本质、"第一个参数永远是句柄"的套路、`read/write/update_bits/bulk_read` 每个参数为什么这么传、`data->regmap` 存哪、对象在内核堆、建多个互不干扰、工厂 `__regmap_init`、`max_register` 的含义 |
 | 06 | [IIO 的 fops 在哪-源码实锤](06-IIO的fops在哪-源码实锤.pdf) | **源码级**:为什么 IIO 驱动里看不到 `file_operations`?带你读内核 `industrialio-core.c`——`iio_read_channel_info`(:630)如何回调你的 `read_raw`(:646)、它被设成属性的 `.show`(:1068)、以及 `/dev/iio:deviceN` 的 `iio_buffer_fileops`(:1605)。证明"壳在内核、肉在你" |
 | 07 | [驱动结构-数据存哪-关键结构体](07-驱动结构-数据存哪-关键结构体.pdf) | **结构化整理**:一段话总结全流程、驱动文件的 10 块主要内容(含书写顺序)、**数据到底存在哪里**(芯片寄存器/内核堆私有数据/瞬时 *val 三处)、附录精讲三大结构体 `i2c_client`/`iio_dev`/`regmap`(各自代表什么、从哪来、关键字段、存哪) |
+| 08 | [里程碑-完整驱动小结](08-里程碑-完整驱动小结.pdf) | **阶段总结**:从零写出完整 MPU6050 IIO 驱动(accel+gyro+temp,raw+scale+offset)的成果、走过的步骤、数据流与物理换算,并用"餐厅(服务员/厨师)"彻底讲清 **read_raw 干嘛、为什么需要它** |
+
+> 💻 对应的完整学习版驱动代码在仓库 [`examples/learning-driver/`](../../examples/learning-driver/)(单文件、多注释,配 i2c-stub 测试说明)。
 
 ## 两个最该先建立的心智模型
 

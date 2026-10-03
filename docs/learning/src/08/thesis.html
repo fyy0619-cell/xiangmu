@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>里程碑:从零写出完整 MPU-6050 IIO 驱动</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.8pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:94%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  .win { border:2px solid #1e8449; background:#eefaf1; border-radius:8px; padding:10px 14px; margin:10px 0; color:#14502b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:23pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">里程碑<br>从零写出一个完整的<br>MPU-6050 IIO 驱动</div>
+  <div class="sub">在 VM 上用 i2c-stub 模拟,一步步手写并验证</div>
+  <div class="sub" style="margin-top:70px;font-size:12pt;">配套仓库 github.com/fyy0619-cell/xiangmu · 2026 年 9 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、我做成了什么</h2>
+<div class="win">
+从一个 hello 内核模块出发,<b>从零手写</b>出了一个<b>结构完整、符合 Linux IIO 标准</b>的 MPU-6050 传感器驱动,并在虚拟机上用 i2c-stub 模拟验证通过:用户 <code>cat</code> 一个文件就能拿到标准物理量。
+</div>
+<h3>最终功能</h3>
+<table>
+  <tr><th>方面</th><th>实现</th></tr>
+  <tr><td>总线 / 匹配</td><td>i2c 驱动;<code>id_table</code> + 设备树 <code>of_match</code>(compatible)</td></tr>
+  <tr><td>探测 probe</td><td>regmap 建通道 → 读 WHO_AM_I 认芯片 → 唤醒(清 sleep)→ 注册 IIO</td></tr>
+  <tr><td>通道</td><td>加速度 X/Y/Z + 陀螺 X/Y/Z + 温度</td></tr>
+  <tr><td>数据接口</td><td>每通道 <code>raw</code> + <code>scale</code>;温度另有 <code>offset</code></td></tr>
+  <tr><td>读取回调</td><td><code>read_raw</code> 按通道类型选寄存器、按 <code>mask</code> 返回 raw/scale/offset</td></tr>
+  <tr><td>资源管理</td><td>全程 <code>devm_</code>,自动释放,无需 remove</td></tr>
+</table>
+<p>代码见仓库 <code>examples/learning-driver/mpu6050_iio.c</code>。</p>
+
+<h3>走过的步骤</h3>
+<p>hello 模块 → i2c 驱动骨架 → i2c-stub 触发 probe → regmap + WHO_AM_I → 唤醒 + 注册 IIO → 加 accel 通道 + read_raw → 加 gyro/temp 通道 → 加 scale/offset。<b>每一步都"改一点 → 编译加载 → 验证"。</b></p>
+
+<div class="pagebreak"></div>
+<h2>二、read_raw 到底干嘛、为什么非要它(重点)</h2>
+<p>这是最容易糊涂、也最关键的一个点。一句话:<b>read_raw 是"真正去芯片里把数值取出来"的那个函数。框架负责接待客人,但它不会读你这颗芯片——只有你写的 read_raw 会。</b></p>
+<figure><img src="figures/fig_chef.png" alt="read_raw角色"><figcaption>图 1　read_raw 的角色:框架是服务员,read_raw 是厨师</figcaption></figure>
+<ul>
+  <li><b>IIO 框架 = 服务员</b>:负责"客人点菜(cat 属性)"和"上菜(格式化返回)"。这套通用流程(fops/sysfs)内核都写好了。</li>
+  <li><b>read_raw = 厨师</b>:真正做菜——去 MPU6050 的寄存器读出数值。<b>框架不会做你这道菜</b>(它不懂你芯片的寄存器),只有你会。</li>
+  <li><b>没有 read_raw 会怎样</b>:属性文件还在,但用户 cat 时框架没厨师可喊,<b>端不出任何数据</b>。read_raw 是数值的唯一来源。</li>
+  <li><b>为什么是回调</b>:你不自己调它,而是把它<b>登记</b>给框架(<code>iio_info.read_raw</code>);用户一点菜,框架就<b>回调</b>它(控制反转)。</li>
+  <li><b>参数就是点菜单</b>:框架传 <code>chan</code>(哪个通道)和 <code>mask</code>(要 raw 还是 scale),你照单取值写回 <code>*val</code>。所以一个 read_raw 用 <code>switch</code> 就能应付所有通道、所有类型。</li>
+</ul>
+<pre>static int mpu6050_read_raw(indio_dev, chan, *val, *val2, mask) {
+    data = iio_priv(indio_dev);         // 取回私有数据(拿 regmap)
+    switch (mask) {                     // 内核要哪类值?
+    case RAW:   按 chan->type 选寄存器 → regmap 读 → *val = ... ; return IIO_VAL_INT;
+    case SCALE: 按 chan->type 返回换算系数;
+    case OFFSET:返回温度偏置;
+    }
+}</pre>
+<div class="key">记住:<b>框架管"接待和上菜"(通用,内核写好);read_raw 管"做这道菜"(芯片相关,只有你会)。没有它,客人点了菜却没人做。</b></div>
+
+<div class="pagebreak"></div>
+<h2>三、数据流与物理换算</h2>
+<pre>cat in_accel_x_raw
+  → IIO 核心(服务员)
+  → 回调你的 read_raw(厨师)
+  → regmap 读芯片 0x3B/0x3C
+  → 返回原始值 → 内核格式化 → 用户看到数字</pre>
+<p>驱动只给<b>原始值</b>和<b>换算系数</b>,真正的单位换算由用户态按 IIO 约定完成:</p>
+<ul>
+  <li>加速度(m/s²) = <code>in_accel_x_raw × in_accel_scale</code></li>
+  <li>角速度(rad/s) = <code>in_anglvel_x_raw × in_anglvel_scale</code></li>
+  <li>温度(℃) = <code>(in_temp_raw + in_temp_offset) / 340</code></li>
+</ul>
+<p>实测(假芯片预置 1g 时):<code>in_accel_z_raw = 16384</code>,× <code>0.000598550</code> ≈ <b>9.806 m/s²</b>,正好是一个重力加速度。</p>
+
+<h2>四、我真正掌握了什么</h2>
+<table>
+  <tr><th>概念</th><th>我已亲手实现/理解</th></tr>
+  <tr><td>设备-驱动匹配</td><td>驱动待命 → 总线出现设备 → 内核调 probe</td></tr>
+  <tr><td>probe 的三件事</td><td>分配(iio_dev+私有) → 初始化(regmap/认芯片/唤醒) → 开接口(注册+通道+read_raw)</td></tr>
+  <tr><td>私有数据</td><td><code>iio_priv</code> 两处取同一块:probe 存 regmap,read_raw 取</td></tr>
+  <tr><td>通道与 read_raw</td><td>多类型通道按 type 选寄存器,按 mask 返回 raw/scale/offset</td></tr>
+  <tr><td>框架分工</td><td>fops/sysfs 在内核核心,我只写芯片相关的 read_raw</td></tr>
+  <tr><td>工程习惯</td><td>骨架优先、增量填肉、每步编译验证;大括号配对排错</td></tr>
+</table>
+
+<blockquote>学习版代码:<code>examples/learning-driver/</code>;完整从零教程见 <code>docs/learning/</code> 01–08。配套仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
