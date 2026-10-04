@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>IIO 软件框架详解</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.8pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:96%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">Linux IIO 软件框架详解</div>
+  <div class="sub">位置 · 同级子系统 · 上下级 · 目的 · 如何实现 · 要掌握什么</div>
+  <div class="sub" style="margin-top:80px;font-size:12pt;">MPU-6050 IIO 驱动学习 · 2026 年 10 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、它在系统的什么位置</h2>
+<figure><img src="figures/fig_iio_pos.png" alt="IIO 位置"><figcaption>图 1　IIO 在 Linux 系统中的位置</figcaption></figure>
+<p>IIO 处在内核的<b>"子系统框架层"</b>:在"总线层(i2c/spi)之上、用户接口(sysfs/字符设备)之下"。它把"各种各样的传感器芯片"统一成"<b>标准传感器接口</b>",让上层应用不用管下层硬件差异。</p>
+
+<h2>二、和它同级别的子系统有哪些</h2>
+<p>IIO 是"按设备类别组织"的众多子系统之一。<b>每个子系统给一类设备做同样的"标准化"的事</b>:</p>
+<table>
+  <tr><th>子系统</th><th>管哪类设备</th><th>对外接口举例</th></tr>
+  <tr><td><b>IIO</b></td><td>传感器 / ADC / DAC(加速度、光、温度…)</td><td>/sys/bus/iio、/dev/iio:deviceN</td></tr>
+  <tr><td>input</td><td>按键、触摸、鼠标键盘</td><td>/dev/input/eventX</td></tr>
+  <tr><td>hwmon</td><td>温度/电压/风扇监控</td><td>/sys/class/hwmon</td></tr>
+  <tr><td>V4L2</td><td>摄像头 / 视频</td><td>/dev/videoN</td></tr>
+  <tr><td>ALSA</td><td>音频(声卡)</td><td>/dev/snd/*</td></tr>
+  <tr><td>RTC</td><td>实时时钟</td><td>/dev/rtcN</td></tr>
+  <tr><td>LED / thermal / regulator / watchdog / tty / net / block …</td><td>灯 / 温控 / 电源 / 看门狗 / 串口 / 网络 / 存储</td><td>各自的 /sys 或 /dev 接口</td></tr>
+</table>
+<div class="key">它们是"兄弟":结构思想一样(核心提供通用管道,驱动填类别特有逻辑),只是面向的设备类别不同。学会 IIO,再看 input/hwmon 几乎一通百通;V4L2/ALSA 更重但同源。</div>
+
+<h2>三、它的上级 / 下级</h2>
+<table>
+  <tr><th>方向</th><th>是谁</th><th>关系</th></tr>
+  <tr><td><b>上级(用户侧)</b></td><td>sysfs(/sys/bus/iio)+ 字符设备(/dev/iio:deviceN)→ libiio 库 → 应用程序 / Android Sensor HAL</td><td>IIO 把数据"标准化地"交给它们;它们不碰硬件</td></tr>
+  <tr><td><b>下级(硬件侧)</b></td><td>总线驱动(i2c_driver/spi_driver/platform)→ 总线核心(i2c_core…)→ 总线控制器驱动 → 芯片</td><td>IIO 驱动借总线去读写具体芯片(如用 regmap 走 I2C)</td></tr>
+</table>
+<p>所以你的 <code>mpu6050_iio</code> 驱动是一座桥:<b>对上</b>注册成 IIO 设备(iio_dev + read_raw),<b>对下</b>是个 i2c_driver(走 I2C 读芯片)。</p>
+
+<div class="pagebreak"></div>
+<h2>四、这类框架的目的是干嘛</h2>
+<ul>
+  <li><b>统一 ABI(标准化)</b>:无论哪颗传感器,用户都用同一种方式访问(cat in_accel_x_raw)。换芯片、换厂商,上层代码不用改。</li>
+  <li><b>代码复用(少造轮子)</b>:sysfs 属性、字符设备 fops、缓冲、触发、事件这些"通用管道"由核心写好;驱动只写"芯片特有的那一小块"(通道 + read_raw)。</li>
+  <li><b>解耦</b>:应用不用懂 I2C、不用懂寄存器;硬件细节被驱动挡在下面。</li>
+  <li><b>对接生态</b>:libiio、Android Sensor HAL、各种工具天然能用你的驱动。</li>
+</ul>
+<div class="key">一句话:子系统框架 = "把一类设备的共性抽出来做成标准 + 通用代码",让"写一个新设备驱动"变成"填几个回调",并让"用这个设备"对所有上层一致。</div>
+
+<h2>五、它是如何实现的</h2>
+<p><b>分工:核心(内核写)+ 驱动(你写)。</b></p>
+<ul>
+  <li><b>IIO 核心</b>(<code>drivers/iio/industrialio-*.c</code>):注册 iio 总线/类;提供 sysfs 的 show/store、字符设备 fops(<code>iio_buffer_fileops</code>)、缓冲(kfifo)、触发(trigger)、事件(event)等通用机制;在用户访问时回调驱动。</li>
+  <li><b>你的驱动</b>:分配并填 <code>struct iio_dev</code>(通道 + 回调表),调 <code>iio_device_register</code> 注册;核心据此自动生成属性文件,并在被读写时回调你的 <code>read_raw/write_raw</code>。</li>
+</ul>
+<p><b>关键数据结构(把它们当"填空表"):</b></p>
+<table>
+  <tr><th>结构体</th><th>作用</th></tr>
+  <tr><td><code>struct iio_dev</code></td><td>一个 IIO 设备的句柄(name/modes/info/channels + 私有数据)</td></tr>
+  <tr><td><code>struct iio_chan_spec</code></td><td>描述一个通道:类型/方向/提供哪些量(raw/scale)/扫描信息</td></tr>
+  <tr><td><code>struct iio_info</code></td><td>回调表:read_raw / write_raw / read_avail / 事件回调…</td></tr>
+  <tr><td><code>struct iio_buffer</code> / <code>iio_trigger</code></td><td>进阶:缓冲流 + 触发(中断/定时驱动的数据流)</td></tr>
+</table>
+<p>数据流:<code>cat in_accel_x_raw</code> → 核心的 <code>iio_read_channel_info</code> → 回调你的 <code>read_raw(chan, mask)</code> → 你 regmap 读芯片 → 返回 → 核心格式化给用户。(字符设备/缓冲路径类似,由核心的 fops 驱动。)</p>
+
+<div class="pagebreak"></div>
+<h2>六、你需要掌握什么</h2>
+<table>
+  <tr><th>层次</th><th>内容</th><th>你的状态</th></tr>
+  <tr><td><b>必会</b></td><td>iio_dev 分配/注册(devm_iio_device_alloc/register)、iio_chan_spec 通道定义、iio_info 的 read_raw/write_raw、scale/offset 约定、sysfs 读法</td><td>✅ 已亲手实现</td></tr>
+  <tr><td><b>进阶</b></td><td>触发缓冲(triggered buffer)、trigger、events(阈值中断)、硬件 FIFO 水位、scan_elements/缓冲数据格式</td><td>待学(生产级那套)</td></tr>
+  <tr><td><b>周边(配合 IIO)</b></td><td>regmap、设备树(compatible/of_match)、总线模型(i2c/spi)、并发(锁)、电源管理(runtime PM)</td><td>大部分已懂 ✅</td></tr>
+  <tr><td><b>面试角度</b></td><td>能讲清:IIO 是什么、在系统哪层、和 V4L2 的关系、数据流、为什么用子系统(标准化/复用/解耦)</td><td>本文即答案</td></tr>
+</table>
+<div class="key">学习建议:<b>先把"必会"吃透(你已做到)→ 再攻"进阶"的触发缓冲+中断(这是和别人拉开差距的点)→ 周边随用随补。</b>看内核 <code>drivers/iio/</code> 下同类驱动(如 <code>inv_mpu6050</code>)是最好的进阶教材。</div>
+
+<blockquote>本文为 Linux IIO 框架的体系化介绍。配套代码 <code>examples/learning-driver/</code>;系列文档见 <code>docs/learning/</code>。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
