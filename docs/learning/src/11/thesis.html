@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MPU6050 驱动开发 · 命令速查卡</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.6; color:#1a1a1a; }
+  h1 { font-size:19pt; color:#0b3d91; text-align:center; margin:0 0 4px; }
+  .subtitle { text-align:center; color:#555; font-size:11pt; margin-bottom:10px; }
+  h2 { font-size:13.5pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:2px; margin-top:16px; }
+  p { margin:5px 0; }
+  table { border-collapse:collapse; width:100%; margin:8px 0; font-size:9.5pt; }
+  th,td { border:1px solid #9bb0d0; padding:5px 7px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:8px; font-family:Consolas,monospace; font-size:9pt; line-height:1.45; white-space:pre-wrap; margin:6px 0; }
+  .rule { border:2px solid #1e8449; background:#eefaf1; border-radius:8px; padding:8px 12px; margin:8px 0; color:#14502b; font-size:10pt; }
+  .tag { display:inline-block; background:#0b3d91; color:#fff; border-radius:4px; padding:1px 8px; font-size:9.5pt; margin-right:6px; }
+</style>
+</head>
+<body>
+
+<h1>MPU-6050 驱动开发 · 命令速查卡</h1>
+<div class="subtitle">虚拟机(编译/部署)+ STM32MP157 开发板(加载/验证)· NFS+TFTP</div>
+
+<div class="rule"><b>核心原则:</b>只改<b>驱动代码</b> → 不用动设备树、不用重编 dtb、连板子都不用重启(NFS 实时,板子上 <code>rmmod</code> 旧 + <code>insmod</code> 新即可)。<b>只有改了设备树(dts)</b>才需要重编 dtb + 板子重启。</div>
+
+<h2>A　虚拟机终端(每次改完驱动代码)</h2>
+<pre>cd ~/linux/Linux_Drivers/04_mpu6050_driver
+
+# 交叉编译出 ARM 的 .ko(KERNELDIR 指板子内核)
+make KERNELDIR=/home/yyf/linux/atk-mp1/linux/my_linux/linux-5.4.31
+
+file mpu6050_iio.ko            # 确认输出含 "ARM"
+
+# 部署到板子根文件系统(NFS 实时,拷完板子马上能看到)
+cp mpu6050_iio.ko /home/yyf/linux/nfs/rootfs/</pre>
+<p>💡 省事:把 <code>Makefile</code> 里 <code>KERNELDIR := /lib/modules/$(shell uname -r)/build</code> 改成
+<code>KERNELDIR := /home/yyf/linux/atk-mp1/linux/my_linux/linux-5.4.31</code>,以后直接 <code>make</code> 即交叉编译(就不再给 VM 自己编 x86 版)。</p>
+
+<h2>B　开发板终端(开机后)</h2>
+<pre># (板子没重启、驱动还在时)先卸载旧的;刚开机这步会提示没有,忽略即可
+rmmod mpu6050_iio
+
+insmod /mpu6050_iio.ko        # 加载新驱动
+dmesg | tail                  # 期望:MPU-6050 detected! + registered
+
+D=/sys/bus/iio/devices/iio:device0
+cat $D/in_accel_x_raw $D/in_accel_y_raw $D/in_accel_z_raw
+cat $D/in_anglvel_x_raw $D/in_anglvel_y_raw $D/in_anglvel_z_raw
+cat $D/in_temp_raw</pre>
+
+<h2>两种典型场景</h2>
+<p><span class="tag">① 只改驱动代码</span>(最常见,板子不用重启)</p>
+<pre>VM :  make KERNELDIR=...   →   cp mpu6050_iio.ko .../nfs/rootfs/
+板子:  rmmod mpu6050_iio   →   insmod /mpu6050_iio.ko   →   cat ...</pre>
+
+<p><span class="tag">② 改了设备树 dts</span>(才需要重编 dtb + 板子重启)</p>
+<pre>VM(多做两步):
+  cd /home/yyf/linux/atk-mp1/linux/my_linux/linux-5.4.31
+  make stm32mp157d-atk.dtb
+  cp arch/arm/boot/dts/stm32mp157d-atk.dtb /home/yyf/linux/tftpboot/
+然后：板子重启(u-boot 重新从 tftp 载新 dtb) → insmod → cat</pre>
+
+<h2>开机后一次性自检(可选)</h2>
+<pre>ls /sys/bus/i2c/devices/      # 有 x-0068 = i2c4 和 mpu6050 节点都在(设备树生效)</pre>
+
+<h2>关键路径备忘</h2>
+<table>
+  <tr><th>东西</th><th>路径(虚拟机上)</th></tr>
+  <tr><td>驱动源码 + Makefile</td><td><code>~/linux/Linux_Drivers/04_mpu6050_driver/</code></td></tr>
+  <tr><td>板子内核源码(交叉编译用)</td><td><code>/home/yyf/linux/atk-mp1/linux/my_linux/linux-5.4.31</code></td></tr>
+  <tr><td>板子根文件系统(放 .ko)</td><td><code>/home/yyf/linux/nfs/rootfs/</code>(= 板子的 <code>/</code>)</td></tr>
+  <tr><td>TFTP(放 dtb / uImage)</td><td><code>/home/yyf/linux/tftpboot/</code></td></tr>
+  <tr><td>板子设备树源</td><td><code>.../linux-5.4.31/arch/arm/boot/dts/stm32mp157d-atk.dts</code></td></tr>
+  <tr><td>进 VM / 看板子串口</td><td><code>ssh vm</code> / 串口 CH340 COM10@115200</td></tr>
+</table>
+
+<h2>常见坑</h2>
+<table>
+  <tr><th>现象</th><th>原因 / 处理</th></tr>
+  <tr><td><code>insmod: No such file or directory</code></td><td>.ko 没拷到 <b>rootfs</b>(是 <code>.../nfs/rootfs/</code>,不是 <code>.../nfs/</code>)</td></tr>
+  <tr><td><code>read WHO_AM_I failed</code> / 无 0x68</td><td>接线:SCL/SDA 反、没供电、没共地;查线</td></tr>
+  <tr><td>改了代码但现象没变</td><td>忘了重新 <code>cp</code> 到 rootfs,或板子上没 <code>rmmod</code> 旧的</td></tr>
+  <tr><td>file 显示 x86 不是 ARM</td><td>没带 <code>KERNELDIR=...linux-5.4.31</code>,编成 VM 版了</td></tr>
+  <tr><td>改了 dts 不生效</td><td>忘了 <code>make ...dtb</code> + 拷 tftpboot + <b>板子重启</b></td></tr>
+</table>
+
+<p style="margin-top:14px;color:#666;font-size:9.5pt;">配套仓库:github.com/fyy0619-cell/xiangmu　·　驱动 compatible = "alientek,mpu6050"(避开主线 inv_mpu6050)</p>
+
+</body>
+</html>
