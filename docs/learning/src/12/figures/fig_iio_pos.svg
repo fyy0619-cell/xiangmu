@@ -1,63 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="640" viewBox="0 0 820 640" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="560" viewBox="0 0 860 560" font-family="Microsoft YaHei, Segoe UI, sans-serif">
   <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#0b3d91"/></marker></defs>
-  <rect x="1" y="1" width="818" height="638" fill="#fff" stroke="#d0d7de"/>
-  <text x="410" y="30" text-anchor="middle" font-size="19" font-weight="bold" fill="#0b3d91">IIO 在 Linux 系统中的位置</text>
+  <rect x="1" y="1" width="858" height="558" fill="#fff" stroke="#d0d7de"/>
+  <text x="430" y="36" text-anchor="middle" font-size="22" font-weight="bold" fill="#0b3d91">IIO 在 Linux 系统中的位置</text>
 
-  <!-- user space -->
-  <rect x="40" y="48" width="740" height="66" rx="8" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
-  <text x="410" y="70" text-anchor="middle" font-size="13" font-weight="bold" fill="#1e8449">用户空间(应用层)</text>
-  <text x="410" y="92" text-anchor="middle" font-size="11" fill="#333">应用程序 · 工具(iio_info / iio_readdev)· libiio 库 · Android Sensor HAL</text>
-  <text x="410" y="108" text-anchor="middle" font-size="10" fill="#777">只认标准接口,不碰硬件细节</text>
+  <rect x="40" y="56" width="780" height="60" rx="8" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="430" y="82" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e8449">用户空间(应用层)</text>
+  <text x="430" y="105" text-anchor="middle" font-size="13" fill="#333">应用 · iio_info / iio_readdev · libiio 库 · Android Sensor HAL(只认标准接口)</text>
 
-  <text x="410" y="132" text-anchor="middle" font-size="10.5" fill="#0b3d91">系统调用 / VFS(用户态↔内核态边界)</text>
+  <text x="430" y="138" text-anchor="middle" font-size="13" fill="#0b3d91">系统调用 / VFS(用户态 ↔ 内核态)</text>
 
-  <!-- kernel abi -->
-  <rect x="40" y="142" width="740" height="46" rx="8" fill="#e8eef8" stroke="#0b3d91" stroke-width="2"/>
-  <text x="410" y="162" text-anchor="middle" font-size="12" font-weight="bold" fill="#0b3d91">内核对外接口</text>
-  <text x="410" y="180" text-anchor="middle" font-size="10.5" fill="#333">sysfs: /sys/bus/iio/...(单次读)　+　字符设备: /dev/iio:deviceN(缓冲流)</text>
+  <rect x="40" y="148" width="780" height="46" rx="8" fill="#e8eef8" stroke="#0b3d91" stroke-width="2"/>
+  <text x="430" y="170" text-anchor="middle" font-size="15" font-weight="bold" fill="#0b3d91">内核对外接口</text>
+  <text x="430" y="189" text-anchor="middle" font-size="12.5" fill="#333">sysfs: /sys/bus/iio(单次读)　+　字符设备: /dev/iio:deviceN(缓冲流)</text>
 
-  <!-- subsystem layer -->
-  <rect x="40" y="206" width="740" height="104" rx="8" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
-  <text x="410" y="226" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#b9770e">子系统框架层(按"设备类别"组织)—— 同一层级,各管一类设备</text>
-  <rect x="55" y="238" width="150" height="56" rx="6" fill="#0b3d91"/><text x="130" y="262" text-anchor="middle" font-size="12" font-weight="bold" fill="#fff">IIO</text><text x="130" y="280" text-anchor="middle" font-size="9.5" fill="#cdd8ee">传感器/ADC</text>
-  <g font-size="10" fill="#333">
-    <rect x="215" y="238" width="92" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="261" y="255" text-anchor="middle">input 输入</text>
-    <rect x="317" y="238" width="92" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="363" y="255" text-anchor="middle">hwmon 监控</text>
-    <rect x="419" y="238" width="92" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="465" y="255" text-anchor="middle">V4L2 视频</text>
-    <rect x="521" y="238" width="92" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="567" y="255" text-anchor="middle">ALSA 音频</text>
-    <rect x="623" y="238" width="142" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="694" y="255" text-anchor="middle">net 网络 / block 存储</text>
-    <rect x="215" y="268" width="92" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="261" y="285" text-anchor="middle">RTC 时钟</text>
-    <rect x="317" y="268" width="92" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="363" y="285" text-anchor="middle">LED</text>
-    <rect x="419" y="268" width="92" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="465" y="285" text-anchor="middle">thermal 温控</text>
-    <rect x="521" y="268" width="92" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="567" y="285" text-anchor="middle">regulator</text>
-    <rect x="623" y="268" width="142" height="26" rx="4" fill="#fff" stroke="#b9770e"/><text x="694" y="285" text-anchor="middle">tty / watchdog ...</text>
+  <rect x="40" y="214" width="780" height="80" rx="8" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
+  <text x="430" y="238" text-anchor="middle" font-size="15" font-weight="bold" fill="#b9770e">子系统框架层(按"设备类别"组织)</text>
+  <rect x="60" y="248" width="150" height="38" rx="6" fill="#0b3d91"/><text x="135" y="273" text-anchor="middle" font-size="16" font-weight="bold" fill="#fff">IIO(传感器)</text>
+  <text x="235" y="262" font-size="13" fill="#333">同级兄弟(各管一类设备):</text>
+  <text x="235" y="282" font-size="13" fill="#333">input · hwmon · V4L2 · ALSA · RTC · LED · thermal · net · block ...</text>
+
+  <rect x="40" y="314" width="780" height="54" rx="8" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="430" y="337" text-anchor="middle" font-size="15" font-weight="bold" fill="#0b3d91">设备驱动(你写的 mpu6050_iio)</text>
+  <text x="430" y="358" text-anchor="middle" font-size="12.5" fill="#333">对上 = IIO 设备(iio_dev + read_raw)　|　对下 = i2c_driver</text>
+
+  <rect x="40" y="388" width="780" height="46" rx="8" fill="#f7f0ff" stroke="#7d3c98" stroke-width="2"/>
+  <text x="430" y="410" text-anchor="middle" font-size="15" font-weight="bold" fill="#7d3c98">总线层</text>
+  <text x="430" y="428" text-anchor="middle" font-size="12.5" fill="#333">i2c_core / spi_core / platform　+　总线控制器驱动</text>
+
+  <rect x="40" y="454" width="780" height="46" rx="8" fill="#fdeaea" stroke="#c0392b" stroke-width="2"/>
+  <text x="430" y="476" text-anchor="middle" font-size="15" font-weight="bold" fill="#c0392b">硬件</text>
+  <text x="430" y="494" text-anchor="middle" font-size="12.5" fill="#333">SoC 内 I2C 控制器 · SCL/SDA 线 · MPU6050 芯片</text>
+
+  <g stroke="#0b3d91" stroke-width="1.8" marker-end="url(#a)">
+    <line x1="430" y1="116" x2="430" y2="148"/>
+    <line x1="430" y1="194" x2="430" y2="214"/>
+    <line x1="430" y1="294" x2="430" y2="314"/>
+    <line x1="430" y1="368" x2="430" y2="388"/>
+    <line x1="430" y1="434" x2="430" y2="454"/>
   </g>
 
-  <!-- device driver -->
-  <rect x="40" y="328" width="740" height="56" rx="8" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
-  <text x="410" y="349" text-anchor="middle" font-size="12" font-weight="bold" fill="#0b3d91">设备驱动(你写的)</text>
-  <text x="410" y="369" text-anchor="middle" font-size="10.5" fill="#333">mpu6050_iio —— 对上:注册成 IIO 设备(iio_dev + read_raw);对下:是个 i2c_driver</text>
-
-  <!-- bus -->
-  <rect x="40" y="402" width="740" height="56" rx="8" fill="#f7f0ff" stroke="#7d3c98" stroke-width="2"/>
-  <text x="410" y="423" text-anchor="middle" font-size="12" font-weight="bold" fill="#7d3c98">总线层</text>
-  <text x="410" y="443" text-anchor="middle" font-size="10.5" fill="#333">i2c_core / spi_core / platform　+　总线控制器驱动</text>
-
-  <!-- hardware -->
-  <rect x="40" y="476" width="740" height="52" rx="8" fill="#fdeaea" stroke="#c0392b" stroke-width="2"/>
-  <text x="410" y="497" text-anchor="middle" font-size="12" font-weight="bold" fill="#c0392b">硬件</text>
-  <text x="410" y="516" text-anchor="middle" font-size="10.5" fill="#333">SoC 内 I2C 控制器 · SCL/SDA 线 · MPU6050 芯片</text>
-
-  <g stroke="#0b3d91" stroke-width="1.6" marker-end="url(#a)">
-    <line x1="410" y1="114" x2="410" y2="142"/>
-    <line x1="410" y1="188" x2="410" y2="206"/>
-    <line x1="410" y1="310" x2="410" y2="328"/>
-    <line x1="410" y1="384" x2="410" y2="402"/>
-    <line x1="410" y1="458" x2="410" y2="476"/>
-  </g>
-
-  <rect x="40" y="546" width="740" height="78" rx="8" fill="#f2f6ff" stroke="#9bb0d0"/>
-  <text x="410" y="568" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#0b3d91">上级(用户侧):sysfs/chardev → libiio/应用　｜　下级(硬件侧):总线驱动 → 控制器 → 芯片</text>
-  <text x="410" y="590" text-anchor="middle" font-size="10.5" fill="#333">IIO 这一层的作用:把"各种传感器芯片"统一成"标准传感器接口",让上层不用管下层硬件差异</text>
-  <text x="410" y="610" text-anchor="middle" font-size="10" fill="#666">(input/hwmon/V4L2/ALSA... 是它的同级,各自对一类设备做同样的"标准化"事)</text>
+  <text x="430" y="528" text-anchor="middle" font-size="12.5" fill="#0b3d91" font-weight="bold">IIO 的作用:把"各种传感器芯片"统一成"标准传感器接口",让上层不管下层硬件差异</text>
+  <text x="430" y="548" text-anchor="middle" font-size="11.5" fill="#666">(input/hwmon/V4L2/ALSA… 是同级,各自对一类设备做同样的标准化)</text>
 </svg>
