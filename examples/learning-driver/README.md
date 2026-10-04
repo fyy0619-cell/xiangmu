@@ -1,5 +1,9 @@
 # learning-driver —— 从零手写的 MPU-6050 IIO 驱动(学习版)
 
+> ✅ **已在真实硬件验证**:交叉编译后部署到 STM32MP157(正点原子 ATK)+ 真 MPU-6050(挂 I2C4),
+> `insmod` 后 `MPU-6050 detected!`,读出随姿态变化的真实加速度(某轴静止 ≈ 1g)。详见
+> [`docs/learning/10-上板成功-真实硬件里程碑.pdf`](../../docs/learning/)。
+
 这是**从零一步步手写**出来的最小可用 MPU-6050 IIO 驱动,用于学习理解。它是本仓库那份[生产级驱动](../../drivers/iio/imu/mpu6050/)的"入门前身":功能更少、代码更短、注释更多,先把 IIO 驱动的核心机制吃透。
 
 完整的从零教程与概念讲解见 [`docs/learning/`](../../docs/learning/)(01–08)。
@@ -33,8 +37,25 @@ cat $D/in_anglvel_scale $D/in_temp_scale $D/in_temp_offset
 ```
 > 物理量换算:加速度 = `in_accel_x_raw × in_accel_scale`(m/s²);角速度同理(rad/s);温度 = `(in_temp_raw + in_temp_offset) / 340`(℃)。
 
-## 上真板子(STM32MP157)
-把 `KERNELDIR` 指到板子的内核源码,交叉编译后拷到板子加载;真板子靠**设备树**里的 `mpu6050@68 { compatible="invensense,mpu6050"; ... }` 节点自动匹配(无需 new_device)。
+## 上真板子(STM32MP157 / 正点原子 ATK,已实测)
+1. 驱动 of_match 用独有 `compatible = "alientek,mpu6050"`(避开主线 inv_mpu6050)。
+2. 交叉编译:`make KERNELDIR=/path/to/linux-5.4.31`(内核 Makefile 已设 ARCH=arm、CROSS_COMPILE)→ `file` 应显示 ARM。
+3. 接线(JP1):SCL→第25脚(I2C4_SCL/PZ4),SDA→第26脚(I2C4_SDA/PZ5),VCC→3V3,GND→GND。
+4. 设备树(加到 `stm32mp157d-atk.dts` 末尾,顶层 override)→ `make stm32mp157d-atk.dtb` → 部署到 tftpboot:
+```dts
+&i2c4 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&i2c4_pins_a>;
+	pinctrl-1 = <&i2c4_pins_sleep_a>;
+	clock-frequency = <100000>;
+	status = "okay";
+	mpu6050@68 {
+		compatible = "alientek,mpu6050";
+		reg = <0x68>;
+	};
+};
+```
+5. `.ko` 拷到 NFS 根文件系统 → 板子重启载新 dtb → `insmod mpu6050_iio.ko` → `cat /sys/bus/iio/devices/iio:device0/in_accel_*_raw`(晃动板子数值变化)。
 
 ## 和生产级驱动的区别
 | | 本学习版 | 生产级(drivers/iio/imu/mpu6050) |

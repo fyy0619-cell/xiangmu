@@ -16,6 +16,7 @@
 | 08 | [里程碑-完整驱动小结](08-里程碑-完整驱动小结.pdf) | **阶段总结**:从零写出完整 MPU6050 IIO 驱动(accel+gyro+temp,raw+scale+offset)的成果、走过的步骤、数据流与物理换算,并用"餐厅(服务员/厨师)"彻底讲清 **read_raw 干嘛、为什么需要它** |
 
 | 09 | [两阶段逻辑-readraw-indiodev字段](09-两阶段逻辑-readraw-indiodev字段.pdf) | **串逻辑**:把 IIO 驱动拆成"阶段一 启动(probe 搭台子,只一次)"与"阶段二 运行(read_raw 唱戏,每次读)"两段(含流程图,纠正"设备树/regmap"两处常见顺序错);再讲透 read_raw、以及 probe 里填 `indio_dev` 字段是"告诉 IIO 核心" |
+| 10 | [上板成功-真实硬件里程碑](10-上板成功-真实硬件里程碑.pdf) | **里程碑 🚀**:驱动交叉编译上 **真 STM32MP157 + 真 MPU6050**,读出随姿态变化的真实加速度(Y≈1g)。含上板全流程(交叉编译/设备树 i2c4/部署/加载)与证据,并**收口 I2C 与 IIO 的关系**(连接方式 vs 软件框架)、"板上没有 IIO 硬件" |
 
 > 💻 对应的完整学习版驱动代码在仓库 [`examples/learning-driver/`](../../examples/learning-driver/)(单文件、多注释,配 i2c-stub 测试说明)。
 

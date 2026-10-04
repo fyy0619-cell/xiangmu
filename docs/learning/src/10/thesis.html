@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>上板成功 · MPU-6050 IIO 驱动真实硬件里程碑</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.8pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:94%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .win { border:2px solid #1e8449; background:#eefaf1; border-radius:8px; padding:10px 14px; margin:10px 0; color:#14502b; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">上板成功<br>MPU-6050 IIO 驱动 · 真实硬件里程碑</div>
+  <div class="sub">从零手写的驱动,在 STM32MP157 + 真 MPU-6050 上读出真实数据</div>
+  <div class="sub" style="margin-top:70px;font-size:12pt;">配套仓库 github.com/fyy0619-cell/xiangmu · 2026 年 10 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、成果:在真板子上跑通,读出真实数据</h2>
+<div class="win">
+自己从零手写的 MPU-6050 IIO 驱动,经<b>交叉编译</b>部署到 <b>STM32MP157(正点原子 ATK)</b>,自改<b>设备树</b>挂到 I2C4,在<b>真实硬件</b>上成功探测芯片并读出<b>随姿态变化的真实加速度/角速度/温度</b>。不再是模拟或编译通过,而是"做出来了"。
+</div>
+
+<h3>关键证据(板子串口终端实录)</h3>
+<pre>[root@ATK-stm32mp1]:/$ insmod /mpu6050_iio.ko
+mpu6050_iio: loading out-of-tree module taints kernel.
+mpu6050_iio 0-0068: MPU-6050 detected!          # 真芯片 WHO_AM_I 读对
+mpu6050_iio 0-0068: registered as an IIO device
+
+$ cat in_accel_x_raw in_accel_y_raw in_accel_z_raw
+992   16768   -1216        # Y 轴朝上:16768 x 0.000598550 ≈ 10.0 m/s² ≈ 1g(重力!)
+$ cat in_accel_x_raw in_accel_y_raw in_accel_z_raw   (翻转板子后)
+-8928  7324   9720         # 数值完全变化 = 真实加速度随姿态改变
+
+$ cat in_accel_scale
+0.000598550</pre>
+<div class="key"><b>物理验证</b>:静止时某轴 ≈ 1g(raw≈16384);一翻转数值就变。这就是"真实世界数据",是模拟永远给不了的。</div>
+
+<h3>完整 IMU 都可读(驱动支持 accel+gyro+temp)</h3>
+<pre>in_accel_{x,y,z}_raw + in_accel_scale        # 加速度 → m/s²
+in_anglvel_{x,y,z}_raw + in_anglvel_scale    # 角速度 → rad/s(旋转时变)
+in_temp_raw + in_temp_scale + in_temp_offset # 温度 → (raw+12420)/340 ℃</pre>
+
+<div class="pagebreak"></div>
+<h2>二、上板做了什么(可复现)</h2>
+<table>
+  <tr><th>步骤</th><th>做法</th></tr>
+  <tr><td>1. 交叉编译</td><td><code>make KERNELDIR=.../linux-5.4.31</code>(内核 Makefile 已设 ARCH=arm、CROSS_COMPILE=arm-none-linux-gnueabihf-)→ 得 ARM <code>.ko</code>(<code>file</code> 验证含 ARM)</td></tr>
+  <tr><td>2. 避免冲突</td><td>驱动 of_match 改独有 <code>compatible = "alientek,mpu6050"</code>,避开主线 inv_mpu6050</td></tr>
+  <tr><td>3. 设备树</td><td>在 <code>stm32mp157d-atk.dts</code> 末尾加 <code>&amp;i2c4</code> override:打开 I2C4(PZ4/PZ5)+ 挂 <code>mpu6050@68</code> 节点 → <code>make stm32mp157d-atk.dtb</code> → 拷到 tftpboot</td></tr>
+  <tr><td>4. 接线</td><td>MPU6050 SCL→JP1-25(I2C4_SCL/PZ4),SDA→JP1-26(I2C4_SDA/PZ5),VCC→3V3,GND→GND</td></tr>
+  <tr><td>5. 部署</td><td>ARM <code>.ko</code> 拷到 NFS 根文件系统(<code>.../nfs/rootfs/</code>)</td></tr>
+  <tr><td>6. 加载验证</td><td>板子重启(载新 dtb)→ <code>insmod</code> → dmesg 见 detected → <code>cat</code> 读真实数据</td></tr>
+</table>
+<p>设备树节点:</p>
+<pre>&i2c4 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&i2c4_pins_a>;          /* PZ4=SCL, PZ5=SDA, AF6 */
+	pinctrl-1 = <&i2c4_pins_sleep_a>;
+	clock-frequency = <100000>;
+	status = "okay";                      /* 打开 I2C4(默认 disabled) */
+	mpu6050@68 {
+		compatible = "alientek,mpu6050";  /* 与驱动 of_match 对上 */
+		reg = <0x68>;
+	};
+};</pre>
+
+<div class="pagebreak"></div>
+<h2>三、概念收口:I2C 与 IIO 是什么关系?板上有 IIO 硬件吗?</h2>
+<p>设备挂在 I2C 总线,却叫 IIO 驱动——因为 <b>I2C 和 IIO 是两个不同维度,一个驱动同时兼两职</b>(图 1)。</p>
+<figure><img src="figures/fig_i2c_iio.png" alt="I2C vs IIO"><figcaption>图 1　I2C(怎么连接)vs IIO(什么类别):一个驱动两顶帽子</figcaption></figure>
+<table>
+  <tr><th></th><th>I2C</th><th>IIO</th></tr>
+  <tr><td>回答什么</td><td>怎么和芯片通信(连接方式)</td><td>这是哪类设备、怎么把数据给用户(软件框架)</td></tr>
+  <tr><td>在驱动里</td><td>i2c_driver + regmap 读芯片(对下)</td><td>iio_dev + 通道 + read_raw,暴露 /sys/bus/iio(对上)</td></tr>
+  <tr><td>是硬件吗</td><td>是(SoC 内 I2C 控制器 + SCL/SDA 线)</td><td><b>不是</b>,纯软件框架(drivers/iio/*.c)</td></tr>
+</table>
+<ul>
+  <li><b>为什么叫 IIO 驱动</b>:按"内容/类别(传感器→IIO)"命名,I2C 只是运输方式。类比:顺丰(I2C)寄来的生鲜(IIO),按内容叫生鲜。</li>
+  <li><b>同一设备两个视图</b>:<code>/sys/bus/i2c/devices/0-0068</code>(连接)与 <code>/sys/bus/iio/devices/iio:device0</code>(传感器身份)。</li>
+  <li><b>板上有 IIO 硬件吗?没有。</b>板上真实硬件只有 MPU6050 + I2C 控制器 + SCL/SDA;IIO 是内核里组织传感器驱动、给用户暴露数据的软件框架,<code>/sys/bus/iio/</code> 是软件虚拟目录。</li>
+  <li>换成 SPI 接口的芯片就是"SPI + IIO",<b>IIO 不变、只换总线</b>——这也是生产级驱动拆 core(IIO)+ i2c(总线)的原因。</li>
+</ul>
+
+<h2>四、这意味着什么</h2>
+<p>整条链路全部打通并经真实硬件验证:<b>从零手写驱动 → 理解每一层 → 交叉编译 ARM → 改设备树 → 部署上板 → 读出真实传感器数据</b>。面试可据实陈述:</p>
+<blockquote>"我从零写了一个 MPU-6050 的 Linux IIO 驱动,交叉编译部署到 STM32MP157,自己改设备树把它挂到 I2C4,在真板子上读出了随姿态变化的真实加速度/角速度/温度。"</blockquote>
+<p>后续可延伸:DRDY 中断 + 触发缓冲(生产级数据流)、采样率配置、对照主线 inv_mpu6050。</p>
+
+<blockquote>学习版代码 <code>examples/learning-driver/</code>(已在真 STM32MP157 验证);完整从零教程见 <code>docs/learning/</code>。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
