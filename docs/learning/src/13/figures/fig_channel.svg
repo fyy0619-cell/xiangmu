@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="560" viewBox="0 0 860 560" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="858" height="558" fill="#fff" stroke="#d0d7de"/>
+  <text x="430" y="34" text-anchor="middle" font-size="20" font-weight="bold" fill="#0b3d91">通道数组 → IIO 核心遍历 → 自动生成 sysfs 文件</text>
+
+  <!-- left: channels array -->
+  <rect x="30" y="56" width="250" height="430" rx="8" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="155" y="80" text-anchor="middle" font-size="14" font-weight="bold" fill="#0b3d91">你写的 channels[](7 个)</text>
+  <g font-size="12" fill="#333">
+    <rect x="48" y="94" width="214" height="30" rx="4" fill="#fff" stroke="#5b8def"/><text x="155" y="114" text-anchor="middle">ACCEL X  (type/modified/address=0)</text>
+    <rect x="48" y="128" width="214" height="30" rx="4" fill="#fff" stroke="#5b8def"/><text x="155" y="148" text-anchor="middle">ACCEL Y  (address=1)</text>
+    <rect x="48" y="162" width="214" height="30" rx="4" fill="#fff" stroke="#5b8def"/><text x="155" y="182" text-anchor="middle">ACCEL Z  (address=2)</text>
+    <rect x="48" y="200" width="214" height="30" rx="4" fill="#fff6ea" stroke="#b9770e"/><text x="155" y="220" text-anchor="middle">GYRO X / Y / Z</text>
+    <rect x="48" y="234" width="214" height="30" rx="4" fill="#fff6ea" stroke="#b9770e"/><text x="155" y="254" text-anchor="middle">(ANGL_VEL, address 0/1/2)</text>
+    <rect x="48" y="272" width="214" height="30" rx="4" fill="#eaf7ea" stroke="#1e8449"/><text x="155" y="292" text-anchor="middle">TEMP (无方向)</text>
+  </g>
+  <text x="155" y="330" text-anchor="middle" font-size="11.5" fill="#555">每个通道里声明:</text>
+  <text x="155" y="350" text-anchor="middle" font-size="11" fill="#555">type(量类型)· 方向 · 提供哪些量</text>
+  <text x="155" y="368" text-anchor="middle" font-size="11" fill="#555">info_mask_separate / shared_by_type</text>
+
+  <!-- middle: core -->
+  <rect x="320" y="220" width="200" height="100" rx="10" fill="#e8eef8" stroke="#0b3d91" stroke-width="2"/>
+  <text x="420" y="256" text-anchor="middle" font-size="14" font-weight="bold" fill="#0b3d91">IIO 核心</text>
+  <text x="420" y="280" text-anchor="middle" font-size="11.5" fill="#333">遍历通道表,</text>
+  <text x="420" y="298" text-anchor="middle" font-size="11.5" fill="#333">按规则生成属性文件</text>
+  <line x1="280" y1="270" x2="318" y2="270" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="520" y1="270" x2="558" y2="270" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- right: sysfs files -->
+  <rect x="560" y="56" width="270" height="430" rx="8" fill="#eaf7ea" stroke="#1e8449" stroke-width="2"/>
+  <text x="695" y="80" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e8449">自动生成的 sysfs 文件</text>
+  <g font-size="11.5" fill="#333" font-family="Consolas,monospace">
+    <text x="578" y="108">in_accel_x_raw   ┐</text>
+    <text x="578" y="128">in_accel_y_raw   │ separate</text>
+    <text x="578" y="148">in_accel_z_raw   ┘ 每轴一个</text>
+    <text x="578" y="172">in_accel_scale     shared_by_type</text>
+    <text x="578" y="192" fill="#777">                   (仨轴共一个)</text>
+    <text x="578" y="222">in_anglvel_x_raw ┐</text>
+    <text x="578" y="242">in_anglvel_y_raw │ 每轴一个</text>
+    <text x="578" y="262">in_anglvel_z_raw ┘</text>
+    <text x="578" y="282">in_anglvel_scale   共一个</text>
+    <text x="578" y="312">in_temp_raw</text>
+    <text x="578" y="332">in_temp_scale</text>
+    <text x="578" y="352">in_temp_offset</text>
+  </g>
+  <text x="695" y="390" text-anchor="middle" font-size="11" fill="#555">用户 cat 任一文件 →</text>
+  <text x="695" y="408" text-anchor="middle" font-size="11" fill="#555">核心回调 read_raw(chan, mask)</text>
+
+  <rect x="30" y="500" width="800" height="48" rx="8" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="430" y="520" text-anchor="middle" font-size="12" font-weight="bold" fill="#0b3d91">通道 = 声明式描述"能测什么量、每个量提供哪些信息";核心据此自动生成文件并路由到 read_raw</text>
+  <text x="430" y="539" text-anchor="middle" font-size="11" fill="#555">info_mask_separate=每通道各一个　·　shared_by_type=同类共一个　·　shared_by_all=整机共一个</text>
+</svg>

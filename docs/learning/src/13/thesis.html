@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>IIO 通道(channel)详解</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:10pt; }
+  th,td { border:1px solid #9bb0d0; padding:6px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.8pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:96%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:160px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:22px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">IIO 通道(channel)详解</div>
+  <div class="sub">概念 · 作用 · 用法 —— 以 MPU-6050 的通道表为例</div>
+  <div class="sub" style="margin-top:90px;font-size:12pt;">2026 年 10 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、通道是什么</h2>
+<p><b>一个通道 = 传感器能测量的一个"量"。</b>你有几个量,就定义几个通道。IIO 核心会<b>遍历你的 <code>iio_chan_spec[]</code> 数组,照着每个通道自动生成对应的 sysfs 文件</b>。MPU-6050 有 7 个通道:加速度 X/Y/Z、陀螺 X/Y/Z、温度。</p>
+<figure><img src="figures/fig_channel.png" alt="通道映射"><figcaption>图 1　通道数组 → IIO 核心遍历 → 自动生成 sysfs 文件</figcaption></figure>
+
+<h2>二、这段代码生成了哪些文件</h2>
+<table>
+  <tr><th>通道定义</th><th>生成的 sysfs 文件</th></tr>
+  <tr><td>3 个 ACCEL(separate RAW)</td><td><code>in_accel_x_raw</code> <code>in_accel_y_raw</code> <code>in_accel_z_raw</code></td></tr>
+  <tr><td>ACCEL 的 SCALE(shared_by_type)</td><td><code>in_accel_scale</code>(<b>仨轴共用一个</b>)</td></tr>
+  <tr><td>3 个 GYRO</td><td><code>in_anglvel_x_raw</code> <code>_y_raw</code> <code>_z_raw</code></td></tr>
+  <tr><td>GYRO 的 SCALE</td><td><code>in_anglvel_scale</code>(共用一个)</td></tr>
+  <tr><td>温度(separate RAW+SCALE+OFFSET)</td><td><code>in_temp_raw</code> <code>in_temp_scale</code> <code>in_temp_offset</code></td></tr>
+</table>
+<p>这正是板子上 <code>ls /sys/bus/iio/devices/iio:device0/</code> 看到的那堆文件——<b>你没手写一个文件,全是核心照通道表生成的。</b></p>
+
+<div class="pagebreak"></div>
+<h2>三、每个字段干嘛</h2>
+<pre>.type = IIO_ACCEL,          // 量的类型 → 文件前缀:in_accel_ / in_anglvel_ / in_temp_
+.modified = 1,              // 这个通道"带修饰"(有方向)
+.channel2 = IIO_MOD_##axis, // 修饰是哪个:X/Y/Z → 文件名里出现 _x_/_y_/_z_
+.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),         // 提供"原始值",每通道各一个
+.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE), // 提供"量程",同类型共用一个
+.address = idx,             // 驱动私有字段,IIO 不解读;存轴号 0/1/2,read_raw 用来算寄存器</pre>
+<ul>
+  <li><b><code>.type</code></b> 定前缀:ACCEL→<code>in_accel_</code>,ANGL_VEL→<code>in_anglvel_</code>,TEMP→<code>in_temp_</code>。</li>
+  <li><b><code>.modified</code> + <code>.channel2</code></b> 定方向后缀:<code>modified=1</code> 表示"有修饰",<code>channel2=IIO_MOD_X</code> → 文件名出现 <code>_x_</code>。<b>温度没有方向</b>,所以不写这两项 → 文件就是 <code>in_temp_raw</code>。</li>
+  <li><b><code>.address</code></b> 是<b>你自己的草稿字段</b>(IIO 不解读),存轴序号;<code>read_raw</code> 里 <code>0x3B + chan->address*2</code> 用它算寄存器。</li>
+</ul>
+
+<h2>四、三种 info_mask 的区别(关键)</h2>
+<table>
+  <tr><th>写法</th><th>含义</th><th>例子</th></tr>
+  <tr><td><code>info_mask_separate</code></td><td><b>每个通道各自</b>生成这个属性</td><td>raw:x/y/z 各一个</td></tr>
+  <tr><td><code>info_mask_shared_by_type</code></td><td><b>同 type 的通道共享一个</b></td><td>scale:仨 accel 共用 <code>in_accel_scale</code></td></tr>
+  <tr><td><code>info_mask_shared_by_all</code></td><td><b>所有通道共享一个</b></td><td>如 <code>sampling_frequency</code></td></tr>
+</table>
+<div class="key">为什么 raw 用 separate、scale 用 shared_by_type?因为<b>每个轴的原始值不同</b>(要各一个),但<b>三个轴的换算系数相同</b>(共用一个就够,省得生成三个一样的)。</div>
+
+<h2>五、通道怎么和 read_raw 配合</h2>
+<p>用户读某个文件时,核心回调 <code>read_raw(indio_dev, chan, *val, *val2, mask)</code>:</p>
+<ul>
+  <li><b><code>chan</code></b> = 是哪个通道(带着它的 <code>.type</code> 和 <code>.address</code>)→ 你据此知道"读哪个量、哪个轴、哪个寄存器"。</li>
+  <li><b><code>mask</code></b> = 用户要哪种信息(<code>RAW</code>/<code>SCALE</code>/<code>OFFSET</code>)→ 你 <code>switch(mask)</code> 决定返回啥。</li>
+</ul>
+<p>所以通道表里声明的 <code>.type</code>/<code>.address</code>/<code>info_mask</code>,和 read_raw 里的 <code>chan->type</code>/<code>chan->address</code>/<code>switch(mask)</code> 是<b>一一对应、配套使用</b>的。</p>
+
+<h2>六、用法总结</h2>
+<div class="key"><b>通道是"声明式"地描述"这颗传感器能测什么量、每个量提供哪些信息(raw/scale/offset)"。</b>你只填一张表(channels 数组),IIO 核心就:① 自动生成所有 sysfs 文件;② 用户访问时带着对应的 <code>chan</code> + <code>mask</code> 回调你的 read_raw。<b>描述能力,而非手写接口</b>——这就是通道的价值。</div>
+
+<blockquote>配套代码 <code>examples/learning-driver/</code>;系列文档见 <code>docs/learning/</code>。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
