@@ -20,6 +20,7 @@
 | 11 | [命令速查卡](11-命令速查卡.pdf) | **速查**:改完驱动代码后,虚拟机(交叉编译+拷 NFS rootfs)和开发板(rmmod/insmod/cat)各敲哪些命令;两种场景(只改代码 vs 改设备树)、关键路径备忘、常见坑 |
 | 12 | [IIO 软件框架详解](12-IIO软件框架详解.pdf) | **体系化**:IIO 在 Linux 系统的位置(分层图)、同级子系统(input/hwmon/V4L2/ALSA…)、上下级(用户 sysfs/libiio ↔ 下层总线/硬件)、这类框架的目的(标准化/复用/解耦)、如何实现(核心+驱动分工+关键结构体)、以及你需要掌握什么(必会/进阶/面试) |
 | 13 | [通道详解](13-通道详解.pdf) | **专题精讲**:IIO 通道(channel)的概念/作用/用法——通道=传感器能测的一个量、7 个通道如何映射成 sysfs 文件(含映射图)、逐字段解释(`.type`/`.modified`/`.channel2`/`.info_mask_*`/`.address`)、三种 info_mask 的区别(separate/shared_by_type/shared_by_all 为什么 raw 用前者、scale 用后者)、通道如何与 `read_raw` 的 `chan`+`mask` 配套;核心思想"声明式描述能力,而非手写接口" |
+| 14 | [触发缓冲与DRDY硬件中断](14-触发缓冲与DRDY硬件中断.pdf) | **进阶篇 🚀(按逻辑编排,4 图)**:流式采集为何需要触发缓冲(单次 cat 的三大硬伤)→ 三个核心概念 trigger/buffer/**pollfunc** → 三个零件分别放在哪(indio_dev 内 vs 独立 trigger0,含归属图)→ **芯片侧 vs 开发板侧分界**(buffer/trigger/pollfunc 全在板子软件里,芯片只有寄存器+采样+INT 一根脚,含分界图)→ 硬件接线(INT→JP1 PZ6)→ 软件三件事(设备树中断属性 / 四个芯片寄存器 SMPLRT_DIV·CONFIG·INT_PIN_CFG·INT_ENABLE / 驱动三块代码逻辑链)→ 运行时数据流时序(标注芯片侧/板子侧)→ 上板验证命令 → 面试要点 |
 
 > 💻 对应的完整学习版驱动代码在仓库 [`examples/learning-driver/`](../../examples/learning-driver/)(单文件、多注释,配 i2c-stub 测试说明)。
 

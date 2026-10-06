@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="560" viewBox="0 0 940 560" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="938" height="558" fill="#fff" stroke="#d0d7de"/>
+  <text x="470" y="40" text-anchor="middle" font-size="24" font-weight="bold" fill="#0b3d91">为什么需要"触发缓冲"——它是被问题逼出来的</text>
+
+  <!-- v1 naive -->
+  <rect x="30" y="66" width="360" height="200" rx="10" fill="#fdeaea" stroke="#c0392b" stroke-width="2"/>
+  <text x="210" y="96" text-anchor="middle" font-size="18" font-weight="bold" fill="#c0392b">朴素做法:用户态死循环 cat</text>
+  <text x="50" y="128" font-size="15" fill="#333">while true; do</text>
+  <text x="70" y="152" font-size="15" fill="#333">cat in_accel_x_raw  (单独一次读)</text>
+  <text x="70" y="176" font-size="15" fill="#333">cat in_accel_y_raw</text>
+  <text x="70" y="200" font-size="15" fill="#333">cat in_accel_z_raw</text>
+  <text x="70" y="224" font-size="15" fill="#333">sleep 0.01</text>
+  <text x="50" y="248" font-size="15" fill="#333">done</text>
+
+  <!-- 3 problems -->
+  <rect x="420" y="66" width="490" height="200" rx="10" fill="#fff6ea" stroke="#b9770e" stroke-width="2"/>
+  <text x="665" y="96" text-anchor="middle" font-size="18" font-weight="bold" fill="#b9770e">三个硬伤</text>
+  <text x="440" y="128" font-size="15.5" fill="#333">① 时间不准:sleep 受调度影响,节拍忽快忽慢</text>
+  <text x="440" y="162" font-size="15.5" fill="#333">② 一帧不齐:X/Y/Z 是三次独立读,不是同一时刻</text>
+  <text x="440" y="196" font-size="15.5" fill="#333">③ 慢又费 CPU:每个值一次系统调用,一秒上千次</text>
+  <text x="440" y="236" font-size="14" fill="#777">做姿态解算/画曲线,这三点都是致命的</text>
+
+  <line x1="470" y1="282" x2="470" y2="316" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+  <text x="560" y="304" text-anchor="middle" font-size="14" fill="#0b3d91">于是引出两个零件</text>
+
+  <!-- solutions -->
+  <rect x="60" y="326" width="390" height="200" rx="10" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="255" y="356" text-anchor="middle" font-size="18" font-weight="bold" fill="#0b3d91">想法一:缓冲 buffer</text>
+  <text x="80" y="388" font-size="15.5" fill="#333">内核里一次把 X/Y/Z 读齐=一帧,</text>
+  <text x="80" y="414" font-size="15.5" fill="#333">塞进一个队列(kfifo)。</text>
+  <text x="80" y="446" font-size="15.5" fill="#333">用户 read() 一次批量取走许多帧。</text>
+  <text x="80" y="482" font-size="14.5" fill="#1e8449">→ 解决②帧齐、③高效</text>
+
+  <rect x="490" y="326" width="390" height="200" rx="10" fill="#eafaf1" stroke="#1e8449" stroke-width="2"/>
+  <text x="685" y="356" text-anchor="middle" font-size="18" font-weight="bold" fill="#1e8449">想法二:触发器 trigger</text>
+  <text x="510" y="388" font-size="15.5" fill="#333">要有东西按节拍喊"现在采一帧"。</text>
+  <text x="510" y="414" font-size="15.5" fill="#333">节拍源可以是:定时器 / 手动 /</text>
+  <text x="510" y="440" font-size="15.5" fill="#333"><tspan font-weight="bold">芯片自己(DRDY 中断)</tspan></text>
+  <text x="510" y="482" font-size="14.5" fill="#1e8449">→ 解决①时间准(硬件定节拍)</text>
+</svg>

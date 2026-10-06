@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="600" viewBox="0 0 940 600" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#7d3c98"/></marker></defs>
+  <rect x="1" y="1" width="938" height="598" fill="#fff" stroke="#d0d7de"/>
+  <text x="470" y="40" text-anchor="middle" font-size="24" font-weight="bold" fill="#0b3d91">三个零件分别放在哪里</text>
+  <text x="470" y="68" text-anchor="middle" font-size="15" fill="#555">buffer 和 pollfunc 属于"你的设备";trigger 是独立设备</text>
+
+  <!-- indio_dev big box -->
+  <rect x="40" y="92" width="520" height="470" rx="12" fill="#eef4ff" stroke="#0b3d91" stroke-width="2.5"/>
+  <text x="300" y="122" text-anchor="middle" font-size="18" font-weight="bold" fill="#0b3d91">indio_dev(你的 IIO 设备 = iio:device0)</text>
+
+  <rect x="70" y="146" width="210" height="70" rx="8" fill="#fff" stroke="#1e8449" stroke-width="2"/>
+  <text x="175" y="176" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e8449">buffer</text>
+  <text x="175" y="200" text-anchor="middle" font-size="13.5" fill="#333">kfifo 队列</text>
+  <text x="70" y="236" font-size="13" fill="#555">indio_dev-&gt;buffer</text>
+
+  <rect x="320" y="146" width="210" height="70" rx="8" fill="#fff" stroke="#b9770e" stroke-width="2"/>
+  <text x="425" y="176" text-anchor="middle" font-size="16" font-weight="bold" fill="#b9770e">pollfunc(工单)</text>
+  <text x="425" y="200" text-anchor="middle" font-size="13.5" fill="#333">顶半部+底半部+时间戳</text>
+  <text x="320" y="236" font-size="13" fill="#555">indio_dev-&gt;pollfunc</text>
+
+  <rect x="70" y="280" width="460" height="250" rx="8" fill="#f7f9ff" stroke="#9bb0d0"/>
+  <text x="300" y="308" text-anchor="middle" font-size="15.5" font-weight="bold" fill="#0b3d91">iio_priv(indio_dev) = struct mpu6050_data</text>
+  <text x="95" y="342" font-size="15" fill="#333">regmap;        // 读写芯片的通道</text>
+  <text x="95" y="374" font-size="15" fill="#333">struct {...} scan;  // 一帧暂存区</text>
+  <text x="95" y="406" font-size="15" fill="#333">struct iio_trigger *trig; ─────┐</text>
+  <text x="95" y="432" font-size="13.5" fill="#777">(只是存了个"指针"指向那个独立触发器)</text>
+  <line x1="420" y1="400" x2="600" y2="400" stroke="#7d3c98" stroke-width="2.5" marker-end="url(#a)"/>
+
+  <!-- standalone trigger -->
+  <rect x="610" y="330" width="300" height="140" rx="12" fill="#f7f0ff" stroke="#7d3c98" stroke-width="2.5"/>
+  <text x="760" y="366" text-anchor="middle" font-size="18" font-weight="bold" fill="#7d3c98">trigger(独立设备)</text>
+  <text x="760" y="398" text-anchor="middle" font-size="15" fill="#333">struct iio_trigger</text>
+  <text x="760" y="424" text-anchor="middle" font-size="15" fill="#333">名字 "mpu6050-dev0"</text>
+  <text x="760" y="450" text-anchor="middle" font-size="14" fill="#555">= /sys/.../trigger0(和设备平级)</text>
+
+  <text x="300" y="556" text-anchor="middle" font-size="14.5" fill="#c0392b" font-weight="bold">probe 里只是各自造好;运行时 echo &gt; current_trigger 才把 pollfunc 挂到 trigger 上</text>
+</svg>

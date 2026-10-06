@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>IIO 触发缓冲与 DRDY 硬件中断详解</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:9.6pt; }
+  th,td { border:1px solid #9bb0d0; padding:5px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.7pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:97%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:25pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:20px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">IIO 触发缓冲与<br>DRDY 硬件中断详解</div>
+  <div class="sub">从"为什么需要"到上板实战 —— 以 MPU-6050 + STM32MP157 为例</div>
+  <div class="sub" style="margin-top:70px;font-size:12pt;">MPU-6050 IIO 驱动学习 · 进阶篇 · 2026 年 10 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>导读</h2>
+<p>本文把"单次读(<code>cat in_accel_x_raw</code>)"之外的<b>流式采集</b>能力讲透:它依赖两个核心机制——<b>触发器(trigger)</b>与<b>触发缓冲(triggered buffer)</b>,数据由芯片的 <b>DRDY(数据就绪)硬件中断</b>驱动,经 <code>/dev/iio:deviceN</code> 成帧输出。全文按"为什么需要 → 三个概念 → 零件归属 → 芯片侧vs板子侧 → 硬件接线 → 软件三件事 → 运行时数据流 → 上板验证 → 面试要点"的逻辑展开。</p>
+
+<h2>一、为什么需要触发缓冲(它是被问题逼出来的)</h2>
+<p>需求很朴素:<b>连续不断</b>地拿到传感器数据(如每 10ms 一帧)去画曲线、做姿态解算。最先想到的是用户态死循环 <code>cat</code>,但它有三个硬伤,正是这三个问题逼出了缓冲与触发器两个零件。</p>
+<figure><img src="figures/fig_why.png"><figcaption>图 1　朴素 cat 循环的三个硬伤 → 导出 buffer 与 trigger</figcaption></figure>
+<table>
+  <tr><th>问题</th><th>后果</th><th>对应的解法</th></tr>
+  <tr><td>① 时间不准</td><td><code>sleep</code> 受调度影响,节拍忽快忽慢</td><td>让<b>硬件</b>定节拍(触发器 + DRDY 中断)</td></tr>
+  <tr><td>② 一帧不齐</td><td>X/Y/Z 三次独立读,不是同一时刻,拼不出真实姿态</td><td>内核一次把一帧读齐,塞进队列(缓冲)</td></tr>
+  <tr><td>③ 慢且费 CPU</td><td>每个值一次系统调用,一秒上千次</td><td>攒成批,用户一次取走(缓冲)</td></tr>
+</table>
+
+<h2>二、三个核心概念</h2>
+<h3>2.1 缓冲 buffer —— 帧排队的传送带</h3>
+<p>内核里一个 <b>kfifo 队列</b>:每来一帧(X/Y/Z… 连续一次读齐)就入队,用户 <code>read()</code> 一次批量取走许多帧。它的出口是 <code>/dev/iio:device0</code>,<code>buffer/length</code> 是队列深度。解决"帧齐"和"高效"。</p>
+<h3>2.2 触发器 trigger —— 喊"现在采一帧"的节拍器</h3>
+<p>一个决定<b>何时采</b>的节拍源。节拍可来自:内核定时器、人工 sysfs、或<b>芯片自己(DRDY 中断)</b>。本项目用 DRDY:芯片真正测完一帧才拉 INT 脚通知,采集节拍与芯片采样完美同步,时间最准。它在系统里是独立设备 <code>/sys/bus/iio/devices/trigger0</code>,名字 <code>mpu6050-dev0</code>。</p>
+<h3>2.3 pollfunc —— 连接触发器与缓冲的"工单"</h3>
+<p><code>struct iio_poll_func</code> 是一张工单:<b>节拍一到,照着它干活</b>。它本身不产生节拍、也不是队列,是二者之间的胶水,记了四样东西:</p>
+<pre>struct iio_poll_func {
+    irqreturn_t (*h)(...);        // 顶半部 = iio_pollfunc_store_time(记时间戳)
+    irqreturn_t (*thread)(...);   // 底半部 = mpu6050_trigger_handler(读数据→塞缓冲)
+    struct iio_dev *indio_dev;    // 回指:这单子属于哪个设备
+    s64 timestamp;                // 顶半部记下"这一刻",底半部拿去用
+};</pre>
+<div class="key"><b>解耦思想:</b>触发器只负责喊"干!",具体干什么全写在 pollfunc 工单里。于是<b>节拍源可随意更换</b>(DRDY / 定时器 / 手动),采集动作的代码一行不改——这正是把三者拆开的价值。</div>
+
+<div class="pagebreak"></div>
+<h2>三、三个零件分别放在哪里</h2>
+<p>关键区别:<b>buffer 和 pollfunc 属于"你的设备"(挂在 <code>indio_dev</code> 下);trigger 是独立设备。</b></p>
+<figure><img src="figures/fig_parts.png"><figcaption>图 2　零件归属:buffer/pollfunc 在 indio_dev 内,trigger 独立存在</figcaption></figure>
+<table>
+  <tr><th>零件</th><th>C 结构</th><th>指针存在哪</th><th>谁创建</th><th>系统里露头处</th></tr>
+  <tr><td>缓冲</td><td><code>struct iio_buffer</code></td><td><code>indio_dev-&gt;buffer</code></td><td><code>devm_iio_triggered_buffer_setup</code></td><td><code>iio:device0/buffer/</code>、<code>/dev/iio:device0</code></td></tr>
+  <tr><td>pollfunc</td><td><code>struct iio_poll_func</code></td><td><code>indio_dev-&gt;pollfunc</code></td><td>同上(一起造)</td><td>无独立 sysfs(内部胶水)</td></tr>
+  <tr><td>触发器</td><td><code>struct iio_trigger</code></td><td><code>data-&gt;trig</code> + 注册进触发器子系统</td><td><code>devm_iio_trigger_alloc</code></td><td><b>独立的</b> <code>trigger0</code></td></tr>
+</table>
+<p>三者在 probe 时只是各自造好;真正把 pollfunc "插"到触发器上是<b>运行时</b>:<code>echo mpu6050-dev0 &gt; .../trigger/current_trigger</code> 这一刻,IIO 才把 <code>indio_dev-&gt;pollfunc</code> 挂进触发器的消费者列表。这也是 <code>ls /sys/bus/iio/devices/</code> 会看到 <code>iio:device0</code> 和 <code>trigger0</code> 两个平级条目的原因。</p>
+
+<h2>四、芯片侧 vs 开发板侧(最容易混的地方)</h2>
+<p>一句话结论:<b>buffer / trigger / pollfunc 全部在开发板(STM32MP157 主核)这边,是内核 RAM 里的软件对象;MPU6050 芯片里一个都没有。</b>芯片里只有:配置寄存器 + 数据寄存器 + 内部采样 + 一根 INT 引脚。</p>
+<figure><img src="figures/fig_boundary.png"><figcaption>图 3　芯片侧 vs 板子侧 —— 谁在哪里,两边只靠 I2C 与 INT 线相连</figcaption></figure>
+<div class="key"><b>一个易绕的点:</b>probe 里 <code>regmap_write(..., SMPLRT_DIV, 0x09)</code> 这类语句——<b>执行代码的是板子 CPU(软件),但它经 I2C 伸手去改芯片内部的寄存器,结果落在芯片里</b>。即"配置动作在板子发起,配置结果存在芯片"。这正是"驱动是桥"的含义。</div>
+<p>跨越分界线的只有两处:<b>芯片→板子</b>是 INT 线(芯片喊"我好了");<b>板子→芯片</b>是 I2C 读/写(板子去读数据、去配置)。其余所有概念都在板子软件里,芯片对它们一无所知。</p>
+
+<div class="pagebreak"></div>
+<h2>五、硬件准备:把 INT 接到板子 GPIO</h2>
+<p>GY-521 模块的 <code>INT</code> 脚(数据就绪输出)此前悬空,需用一根线接到板子一个空闲 GPIO。本板(正点原子 ATK-DLMP157 V1.5)扩展排针 <b>JP1</b> 上:</p>
+<ul>
+  <li><b>JP1 第 25 脚 = I2C4_SCL(PZ4)</b>、<b>第 26 脚 = I2C4_SDA(PZ5)</b> —— SCL/SDA 已接。</li>
+  <li><b>第 28 脚 = PZ6</b> —— 无信号名的空闲 GPIO,选它接 INT。(第 5 脚 6D_INT/PA14 被板载 ICM-20608D 占用,不能用。)</li>
+</ul>
+<p>接线:<b>模块 INT ──► JP1 第 28 脚(PZ6)</b>。MPU6050 的 INT 默认推挽、高有效、50µs 脉冲,自带驱动能力,<b>不需外接上/下拉电阻</b>;且是"模块输出→SoC 输入",接错也不会烧,最坏是收不到中断。</p>
+
+<h2>六、软件实现:三件事</h2>
+
+<h3>6.1 设备树:告诉内核"中断在 PZ6"</h3>
+<p>在 <code>mpu6050@68</code> 节点加两行(PZ6 属 GPIOZ,运行时已确认该 bank 使能,line 6):</p>
+<pre>mpu6050@68 {
+    compatible = "alientek,mpu6050";
+    reg = &lt;0x68&gt;;
+    interrupt-parent = &lt;&amp;gpioz&gt;;              /* 中断挂在 GPIOZ 控制器上 */
+    interrupts = &lt;6 IRQ_TYPE_EDGE_RISING&gt;;   /* 第6号线=PZ6;上升沿触发 */
+};</pre>
+<p><code>&lt;6 ...&gt;</code> 的 <code>6</code> 是<b>组内线号</b>(PZ6 → 6),不是全局 gpio 号 406。编好 dtb 拷到 TFTP 目录,重启生效。之后 i2c 核心会自动把该中断号填进驱动的 <code>client-&gt;irq</code>。</p>
+
+<h3>6.2 配置芯片四个寄存器(让 DRDY 以稳定节拍产生)</h3>
+<table>
+  <tr><th>寄存器(值)</th><th>作用</th><th>为什么这么设</th></tr>
+  <tr><td>CONFIG=0x03 (0x1A)</td><td>DLPF 数字低通滤波</td><td>DLPF_CFG=3:带宽约 44Hz 滤噪,且把基准频率定为 <b>1kHz</b></td></tr>
+  <tr><td>SMPLRT_DIV=0x09 (0x19)</td><td>采样率分频</td><td>采样率 = 1000/(1+9) = <b>100Hz</b>(每 10ms 一帧,拉一次 INT)</td></tr>
+  <tr><td>INT_PIN_CFG=0x00 (0x37)</td><td>INT 引脚电气特性</td><td>全 0 = 高有效 + 推挽 + 50µs 脉冲 → 对应设备树的<b>上升沿</b>、免上拉、免清中断</td></tr>
+  <tr><td>INT_ENABLE=0x00 (0x38)</td><td>中断使能开关</td><td>先全关;等用户开缓冲时由 <code>set_trigger_state</code> 把 bit0(DATA_RDY)置 1,实现"按需开中断"</td></tr>
+</table>
+<div class="key">CONFIG 与 SMPLRT_DIV 是一对:前者把基准定成 1kHz,后者除以 10 得到 100Hz 出数节拍。INT_PIN_CFG 的"高有效"必须与设备树的"上升沿"一致,否则收不到中断。</div>
+
+<div class="pagebreak"></div>
+<h3>6.3 驱动三块代码与逻辑链</h3>
+<p>probe 里造三个零件,靠触发器这个"中枢"连起来:</p>
+<pre>/* ① 建触发缓冲:顶半部记时间戳,底半部=handler 读数据 */
+devm_iio_triggered_buffer_setup(&amp;client-&gt;dev, indio_dev,
+        iio_pollfunc_store_time, mpu6050_trigger_handler, NULL);
+
+/* ② 建 DRDY 触发器,并把 indio_dev 藏进去备用 */
+data-&gt;trig = devm_iio_trigger_alloc(&amp;client-&gt;dev, "%s-dev%d",
+        indio_dev-&gt;name, indio_dev-&gt;id);
+data-&gt;trig-&gt;ops = &amp;mpu6050_trigger_ops;        /* 带开关 set_trigger_state */
+iio_trigger_set_drvdata(data-&gt;trig, indio_dev);
+
+/* ③ 申请中断:INT上升沿 → generic_data_rdy_poll → 踢触发器 */
+devm_request_irq(&amp;client-&gt;dev, client-&gt;irq,
+        iio_trigger_generic_data_rdy_poll,     /* 中断来了只做一件事:踢 trig */
+        IRQF_TRIGGER_RISING, "mpu6050_drdy",
+        data-&gt;trig);                           /* ★把触发器当私有数据传入 */</pre>
+<p>连接关系:<b>触发器是中枢</b>,两头被接上——③把物理中断接成它的"上游节拍源"(靠传入 <code>data-&gt;trig</code>),①的 pollfunc 在运行时接成它的"下游消费者"。<code>set_drvdata</code> 则让开关函数 <code>set_trigger_state</code> 能从 <code>trig</code> 找回 <code>indio_dev</code> → 再到 regmap 去写芯片 INT_ENABLE。</p>
+
+<h2>七、运行时数据流(每步在哪一侧)</h2>
+<figure><img src="figures/fig_flow.png"><figcaption>图 4　从芯片测完一帧到用户取走的完整时序,标注芯片侧/板子侧</figcaption></figure>
+<p>底半部 <code>mpu6050_trigger_handler</code> 的核心:一次连续读 14 字节(AX,AY,AZ,TEMP,GX,GY,GZ),连同时间戳推进缓冲:</p>
+<pre>regmap_bulk_read(data-&gt;regmap, MPU6050_REG_ACCEL_XOUT_H,
+                 data-&gt;scan.chans, sizeof(data-&gt;scan.chans));
+iio_push_to_buffers_with_timestamp(indio_dev, &amp;data-&gt;scan, pf-&gt;timestamp);
+iio_trigger_notify_done(indio_dev-&gt;trig);</pre>
+<p>其中 <code>scan</code> 暂存区的 <code>scan_index</code> 与寄存器连续读顺序一致(0=AX…6=GZ,7=时间戳),时间戳按 8 字节对齐放尾部;各通道 <code>scan_type</code> 为 16 位、有符号、大端(芯片高字节在前)。</p>
+
+<h2>八、上板验证</h2>
+<pre>cd /sys/bus/iio/devices/iio:device0
+echo mpu6050-dev0 &gt; trigger/current_trigger       # 把触发器绑给缓冲
+echo 1 &gt; scan_elements/in_accel_x_en              # 选通道:accel x/y/z + 时间戳
+echo 1 &gt; scan_elements/in_accel_y_en
+echo 1 &gt; scan_elements/in_accel_z_en
+echo 1 &gt; scan_elements/in_timestamp_en
+echo 64 &gt; buffer/length
+echo 1 &gt; buffer/enable                            # 开缓冲(此刻才打开芯片DRDY中断)
+cat /proc/interrupts | grep mpu6050_drdy          # 关键证据:计数应 ~100/秒 在涨
+timeout 1 hexdump -C /dev/iio:device0 | head       # 成帧二进制数据
+echo 0 &gt; buffer/enable</pre>
+<div class="key"><b>判断成功:</b>① <code>mpu6050_drdy</code> 中断计数 1 秒涨约 100 → 证明是<b>硬件中断</b>在驱动采集,不是软件轮询;② <code>hexdump</code> 源源不断出数据 → <code>/dev/iio:device0</code> 成帧输出打通。每帧 16 字节 = AX/AY/AZ(各2字节有符号大端)+ 2 字节填充 + 8 字节时间戳(ns)。</div>
+
+<h2>九、面试要点</h2>
+<ul>
+  <li><b>为什么要触发缓冲:</b>解决单次 cat 的时间抖动、帧不齐、系统调用开销三大问题。</li>
+  <li><b>trigger/buffer/pollfunc 分工:</b>触发器定节拍(可插拔)、缓冲排队、pollfunc 是二者胶水;解耦让节拍源可换而采集代码不变。</li>
+  <li><b>中断上下半部:</b>硬中断只 <code>iio_trigger_poll</code> 踢一下(极短);真正读 I2C(会睡眠)放底半部线程。</li>
+  <li><b>软硬件边界:</b>芯片只有寄存器+采样+INT 脚;trigger/buffer/pollfunc 都是板子内核软件;两处跨界=I2C 与 INT 线。</li>
+  <li><b>按需开中断:</b>probe 先关 INT_ENABLE,用户开缓冲时 <code>set_trigger_state</code> 才打开,省电不扰系统。</li>
+</ul>
+
+<blockquote>本文为 MPU-6050 IIO 驱动学习的进阶篇(触发缓冲 + 硬件中断),基于真实上板实战整理。配套代码见仓库 <code>examples/learning-driver/</code> 与 <code>drivers/iio/imu/mpu6050/</code>;系列文档见 <code>docs/learning/</code>。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>

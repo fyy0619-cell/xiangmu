@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="700" viewBox="0 0 940 700" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <rect x="1" y="1" width="938" height="698" fill="#fff" stroke="#d0d7de"/>
+  <text x="470" y="40" text-anchor="middle" font-size="24" font-weight="bold" fill="#0b3d91">芯片侧 vs 开发板侧 —— 谁在哪里</text>
+
+  <!-- chip side -->
+  <rect x="40" y="62" width="860" height="200" rx="12" fill="#fdeaea" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="470" y="92" text-anchor="middle" font-size="19" font-weight="bold" fill="#c0392b">MPU6050 芯片(GY-521 小蓝板)— 纯硬件,没有软件</text>
+  <text x="70" y="126" font-size="16" fill="#333">• 内部 ADC:按设定频率(100Hz)不停测量</text>
+  <text x="70" y="156" font-size="16" fill="#333">• 配置寄存器:SMPLRT_DIV / CONFIG / INT_PIN_CFG / INT_ENABLE</text>
+  <text x="70" y="186" font-size="16" fill="#333">• 数据寄存器:ACCEL / TEMP / GYRO(0x3B~0x48)</text>
+  <text x="70" y="216" font-size="16" fill="#333">• INT 引脚(输出):测完一帧就按配置拉高一下</text>
+  <text x="70" y="244" font-size="14" fill="#a33">芯片里<tspan font-weight="bold">没有</tspan> buffer / trigger / pollfunc —— 它根本不知道这些概念</text>
+
+  <!-- wires / boundary -->
+  <line x1="40" y1="300" x2="900" y2="300" stroke="#0b3d91" stroke-width="2" stroke-dasharray="10 6"/>
+  <text x="852" y="294" font-size="13" fill="#0b3d91">分界线</text>
+  <!-- SCL/SDA -->
+  <line x1="230" y1="262" x2="230" y2="338" stroke="#7d3c98" stroke-width="3"/>
+  <text x="230" y="284" text-anchor="middle" font-size="14" fill="#7d3c98">I2C</text>
+  <text x="230" y="320" text-anchor="middle" font-size="13" fill="#7d3c98">SCL/SDA</text>
+  <!-- INT -->
+  <line x1="470" y1="262" x2="470" y2="338" stroke="#c0392b" stroke-width="3"/>
+  <text x="470" y="284" text-anchor="middle" font-size="14" fill="#c0392b">INT</text>
+  <text x="470" y="320" text-anchor="middle" font-size="13" fill="#c0392b">→ PZ6</text>
+  <!-- power -->
+  <line x1="710" y1="262" x2="710" y2="338" stroke="#888" stroke-width="3"/>
+  <text x="710" y="320" text-anchor="middle" font-size="13" fill="#666">VCC/GND</text>
+  <text x="470" y="356" text-anchor="middle" font-size="13.5" fill="#0b3d91">只有这几根线跨界:板子经 I2C 读/配芯片;芯片经 INT 线通知板子</text>
+
+  <!-- board side -->
+  <rect x="40" y="372" width="860" height="310" rx="12" fill="#eef4ff" stroke="#0b3d91" stroke-width="2.5"/>
+  <text x="470" y="402" text-anchor="middle" font-size="19" font-weight="bold" fill="#0b3d91">STM32MP157 开发板 / 主核 A7 / 跑 Linux</text>
+
+  <rect x="66" y="418" width="808" height="74" rx="8" fill="#fff" stroke="#7d3c98" stroke-width="1.8"/>
+  <text x="86" y="444" font-size="16" font-weight="bold" fill="#7d3c98">硬件外设:</text>
+  <text x="86" y="472" font-size="15.5" fill="#333">I2C4 控制器(走 SCL/SDA 读写芯片寄存器)　·　GPIO/EXTI:PZ6 收 INT 上升沿 → 产生内核中断</text>
+
+  <rect x="66" y="504" width="808" height="160" rx="8" fill="#eafaf1" stroke="#1e8449" stroke-width="1.8"/>
+  <text x="86" y="530" font-size="16" font-weight="bold" fill="#1e8449">纯软件(你的 .ko + 内核,全在板子 RAM 里):</text>
+  <text x="86" y="560" font-size="15.5" fill="#333">驱动 mpu6050_iio.ko · regmap · iio_dev</text>
+  <text x="86" y="590" font-size="15.5" fill="#0b3d91" font-weight="bold">★ buffer(队列) · trigger(trigger0) · pollfunc(工单)</text>
+  <text x="86" y="620" font-size="15.5" fill="#333">中断处理函数 · trigger_handler · /dev/iio:device0 · /sys/bus/iio/...</text>
+  <text x="86" y="650" font-size="14" fill="#555">判断口诀:凡"对象/队列/函数/概念"都在板子软件里;芯片里只有"寄存器+采样+INT一根脚"</text>
+</svg>
