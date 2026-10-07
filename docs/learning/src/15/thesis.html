@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>IIO 触发缓冲驱动深入理解:部件关系·调用方向·职责边界</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:9.6pt; }
+  th,td { border:1px solid #9bb0d0; padding:5px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.7pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:97%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:20px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">IIO 触发缓冲驱动<br>深入理解</div>
+  <div class="sub">部件关系 · 调用方向 · 职责边界 —— 把"各部件怎么配合"一次讲透</div>
+  <div class="sub" style="margin-top:70px;font-size:12pt;">MPU-6050 IIO 驱动学习 · 剖析篇 · 2026 年 10 月</div>
+</div>
+
+<div class="pagebreak"></div>
+
+<h2>总 · 一张图看懂四层角色</h2>
+<p>触发缓冲驱动里零件不少:read_raw、trigger_handler、regmap、trigger、buffer、pollfunc……初学最容易把它们的<b>关系</b>搞混——谁调谁、谁装着谁、谁决定谁。其实只要抓住<b>四层角色</b>和<b>一个铁律</b>,全部迎刃而解。</p>
+<figure><img src="figures/fig_overview.png"><figcaption>图 1　四层角色(事件→大脑→工具→芯片)+ 触发器是可插拔工具</figcaption></figure>
+<table>
+  <tr><th>角色</th><th>是谁</th><th>职责</th></tr>
+  <tr><td><b>发起者</b></td><td>事件:用户 cat / 芯片 DRDY 中断</td><td>决定"这次读动作什么时候发生"</td></tr>
+  <tr><td><b>大脑</b></td><td><code>mpu6050_read_raw</code> / <code>mpu6050_trigger_handler</code></td><td>决定"读什么、怎么加工",但不亲自碰 I2C</td></tr>
+  <tr><td><b>工具(手)</b></td><td><code>regmap_read</code> / <code>regmap_bulk_read</code></td><td>唯一真正跟芯片通信、读写寄存器的</td></tr>
+  <tr><td><b>芯片</b></td><td>MPU6050 寄存器</td><td>数据与配置的真正所在(不在板子 RAM)</td></tr>
+</table>
+<div class="key"><b>一个铁律:调用方向永远向下(上层调下层),绝不回头。</b>事件触发大脑,大脑叫工具,工具跟芯片打交道。记住这条,后面所有疑问都是它的推论。</div>
+
+<h2>分 · 1　set_trigger_state:触发器的"电闸"</h2>
+<p>它登记在 <code>trigger_ops</code> 里,是<b>触发器的开关</b>,由 IIO 核心在用户开/关缓冲时回调:</p>
+<pre>static int mpu6050_set_trigger_state(struct iio_trigger *trig, bool enable)
+{
+    struct iio_dev *indio_dev = iio_trigger_get_drvdata(trig);  // 找回设备
+    struct mpu6050_data *data = iio_priv(indio_dev);            // 拿到 regmap
+    return regmap_update_bits(data-&gt;regmap, MPU6050_REG_INT_ENABLE,
+                              MPU6050_INT_DATA_RDY_EN,
+                              enable ? MPU6050_INT_DATA_RDY_EN : 0);  // 翻 bit0
+}</pre>
+<ul>
+  <li>入参只有 <code>trig</code>,所以用 <code>get_drvdata</code> 找回 <code>indio_dev</code>(对应 probe 里的 <code>set_drvdata</code>),再 <code>iio_priv</code> 拿 regmap。</li>
+  <li><code>regmap_update_bits(reg, 掩码, 值)</code>:<b>只动掩码圈住的那一位</b>(bit0 DATA_RDY_EN),其余不碰;开→置 1,关→清 0。用 update_bits 而非 write,避免误伤别的位。</li>
+  <li>这段代码跑在板子,但经 I2C 把结果写进<b>芯片</b>的 INT_ENABLE —— "动作在板子发起,结果落在芯片"。</li>
+</ul>
+
+<h2>分 · 2　触发器 vs 缓冲:触发器只是工具</h2>
+<p>这是最该立住的边界:<b>触发器只回答"什么时候",缓冲才负责"采什么、存哪、给谁"。</b></p>
+<table>
+  <tr><th></th><th>触发器 trigger</th><th>缓冲 buffer</th></tr>
+  <tr><td>本质</td><td>一个时钟/发令枪(工具)</td><td>你真正要的东西(目标)</td></tr>
+  <tr><td>只负责</td><td>产生"滴答"</td><td>读帧、排队、给用户</td></tr>
+  <tr><td>知道数据吗</td><td><b>完全不知道</b>有 MPU6050、有 14 字节</td><td>知道读哪些通道、怎么打包</td></tr>
+  <tr><td>能换吗</td><td>能(DRDY/定时器/手动)</td><td>它就是采集目标</td></tr>
+</table>
+<div class="key"><b><code>set_trigger_state</code> 属于触发器(工具)这侧</b>——它只做"开/关滴答源"这一件事,从不碰"读数据塞缓冲"(那永远在缓冲侧的 pollfunc 里)。两侧只在一个点相遇:<code>current_trigger</code>——运行时 <code>echo mpu6050-dev0 &gt; current_trigger</code> 把缓冲的 pollfunc 挂到触发器上,本质是"<b>给缓冲选一个时钟</b>"。</div>
+
+<div class="pagebreak"></div>
+<h2>分 · 3　芯片中断与触发器:谁决定谁(不循环)</h2>
+<p>表面像鸡生蛋:开中断的是触发器,踢触发器的又是中断。其实<b>这是两个不同时刻、两件不同的事</b>,把时间线拉开就不矛盾了。</p>
+<figure><img src="figures/fig_phases.png"><figcaption>图 2　开闸一次(配置期)vs 踢反复(运行期),门铃类比</figcaption></figure>
+<table>
+  <tr><th></th><th>① 开中断(set_trigger_state)</th><th>② 中断踢触发器</th></tr>
+  <tr><td>是什么</td><td><b>允许</b>中断发生(开闸/通电)</td><td>中断<b>真的</b>发生(按铃)</td></tr>
+  <tr><td>几次</td><td>一次(开缓冲那刻)</td><td>反复(每 10ms)</td></tr>
+  <tr><td>方向</td><td>触发器开关 → 芯片中断源</td><td>芯片中断 → 触发器</td></tr>
+</table>
+<p><b>先后顺序:</b>一定先①开闸(前提),之后才有②中断反复踢触发器(结果)。没开闸,芯片测完也不会拉 INT。<b>谁决定谁:</b>要不要通电=用户(开缓冲)决定;通电后响不响=芯片(测完一帧)决定。两个决定权在不同角色、不同时刻,不循环。</p>
+
+<h2>分 · 4　它们在内存里:包含关系</h2>
+<p>前面说过"软件对象都在板子 RAM(内核空间)"。再细看<b>谁嵌在谁里、谁指向谁</b>——要分清两种"包含":<b>嵌入(真包含,同一块)</b> vs <b>指针引用(各自独立块)</b>。</p>
+<figure><img src="figures/fig_mem.png"><figcaption>图 3　内存包含关系:真包含只有一块,其余是独立块+指针,互相回指成对象图</figcaption></figure>
+<ul>
+  <li><b>真包含(同块嵌入):</b>只有 <code>iio_dev + mpu6050_data</code> 是一块 kmalloc;<code>scan</code>(chans[7]+timestamp)嵌在 mpu6050_data 里,不是指针。</li>
+  <li><b>独立块+指针:</b><code>regmap</code>/<code>trigger</code>/<code>buffer</code>/<code>pollfunc</code> 各是单独分配,靠指针连;<code>trigger-&gt;drvdata</code> 与 <code>pollfunc-&gt;indio_dev</code> 又回指设备 → 形成互相引用的对象图。</li>
+  <li><b>不在堆上:</b><code>channels[]</code>/<code>info</code>/<code>ops</code> 是 <code>static const</code>,在模块代码段(只读数据)。</li>
+  <li><b>易失:</b>全部在 RAM,断电/rmmod 即清空,靠 probe 重建;<code>.ko</code> 文件在存储(SD/NFS),芯片寄存器值在芯片硅片上,读过来才进 RAM。</li>
+</ul>
+
+<h2>分 · 5　read_raw / regmap / trigger_handler:职责与调用方向</h2>
+<p>三者分属不同层级,别搞混也别搞反方向。</p>
+<figure><img src="figures/fig_call.png"><figcaption>图 4　两条平行读路都调 regmap;调用方向永远向下</figcaption></figure>
+<h3>5.1 谁是大脑、谁是手</h3>
+<p><code>read_raw</code> 和 <code>trigger_handler</code> 是<b>两个平行的"大脑入口"</b>(一个应对 cat、一个应对中断),它们<b>都不亲自碰 I2C</b>,而是<b>都叫 regmap 这只"手"</b>去读:read_raw 叫 <code>regmap_read</code> 读 1 个通道,trigger_handler 叫 <code>regmap_bulk_read</code> 读一整帧。</p>
+<h3>5.2 调用方向:永远向下,regmap 不会回头调 read_raw</h3>
+<pre>核心 iio_read_channel_info  →  你的 read_raw  →  regmap_read  →  i2c_transfer  →  芯片</pre>
+<p>每层调它下面那层。<code>regmap_read</code> 是内核<b>通用库</b>,根本不认识你的 <code>read_raw</code>,只会往更底层(I2C)调。所以永远是 <b>read_raw 调 regmap_read</b>,不是反过来。(唯一的"回调"是核心调你的 read_raw/handler——那也是从上往下。)</p>
+<h3>5.3 read_raw ≠ "配 regmap 参数"</h3>
+<p>read_raw 是<b>"用户问什么答什么"的应答函数</b>:收到 <code>(chan, mask)</code>,决定要不要读芯片、读哪、怎么加工、什么格式返回。"配 regmap 参数(算出读哪个寄存器)"只是它 RAW 分支里的第一步;而 <b>SCALE/OFFSET 分支根本不碰 regmap</b>,直接返回常数。</p>
+
+<div class="pagebreak"></div>
+<h2>分 · 6　流式模式下 read_raw 仍必不可少</h2>
+<p>开了缓冲源源不断读数据,<code>read_raw</code> 没失业,反而承担缓冲<b>给不了</b>的活:</p>
+<table>
+  <tr><th>需求</th><th>走哪条路</th><th>用到 read_raw?</th></tr>
+  <tr><td>连续高速拿一大批帧</td><td>缓冲(trigger_handler→bulk_read)</td><td>否</td></tr>
+  <tr><td><b>把原始数换算成 m/s²(读 scale/offset)</b></td><td><b>read_raw 的 SCALE/OFFSET 分支</b></td><td><b>是,且必需</b></td></tr>
+  <tr><td>随手看某轴当前值</td><td>read_raw 的 RAW 分支</td><td>是</td></tr>
+</table>
+<div class="key"><b>缓冲只吐原始数字</b>(如 AX=16000),<b>换算成物理量必须靠 read_raw 的 scale</b>:16000 × 0.000598550 ≈ 9.58 m/s²。任何处理缓冲流的程序(libiio/iio_readdev/自写采集),开头都会先读一次 <code>in_accel_scale</code>——那就是在调 read_raw。SCALE/OFFSET 不碰芯片,永远可用;RAW 单读在生产级驱动里常用 <code>iio_device_claim_direct_mode</code> 在缓冲活动时返回 <code>-EBUSY</code>(我们学习版未加,是可补的进阶点)。</div>
+
+<h2>总 · 统一心智模型</h2>
+<p>把六个剖析点收拢成一套可复用的判断法:</p>
+<ol>
+  <li><b>四层角色:</b>事件(发起)→ 大脑入口(决策加工)→ regmap(动手)→ 芯片。调用方向永远向下。</li>
+  <li><b>触发器是工具:</b>只产生滴答、可插拔、不碰数据;<code>set_trigger_state</code> 是它"开/关自己滴答源"的开关。</li>
+  <li><b>两件事不循环:</b>配置期"开闸"(一次,触发器→芯片中断)在前;运行期"踢"(反复,芯片中断→触发器)在后。</li>
+  <li><b>两条平行读路:</b>cat 走 read_raw、中断走 trigger_handler,互不隶属,都用 regmap 这只手。</li>
+  <li><b>内存:</b>软件对象全在板子 RAM;真包含只有 iio_dev+mpu6050_data 一块,其余独立块+指针互指;芯片寄存器在硅片上。</li>
+  <li><b>read_raw 不可替代:</b>流式下仍负责 scale/offset 换算与零散单读,与缓冲互补。</li>
+</ol>
+<div class="key"><b>一句话总纲:</b>事件发起、大脑决策、regmap 动手、芯片存数;触发器是可插拔的时钟,缓冲是排队的传送带,read_raw 是随叫随到的应答窗口——各司其职,方向向下,互不越界。</div>
+
+<blockquote>本文为 MPU-6050 IIO 驱动学习的剖析篇(部件关系/调用方向/职责边界),承接进阶篇"触发缓冲与 DRDY 硬件中断"。系列文档见 <code>docs/learning/</code>;配套代码见 <code>examples/learning-driver/</code>。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>

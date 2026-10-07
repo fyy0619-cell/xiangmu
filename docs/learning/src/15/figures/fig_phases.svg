@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="540" viewBox="0 0 940 540" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="938" height="538" fill="#fff" stroke="#d0d7de"/>
+  <text x="470" y="38" text-anchor="middle" font-size="23" font-weight="bold" fill="#0b3d91">芯片中断与触发器:不循环,是两个时刻两件事</text>
+
+  <!-- phase 1 -->
+  <rect x="40" y="66" width="860" height="150" rx="10" fill="#eef4ff" stroke="#0b3d91" stroke-width="2"/>
+  <text x="60" y="94" font-size="17" font-weight="bold" fill="#0b3d91">① 配置期(一次):开闸 —— 方向:触发器 → 芯片中断</text>
+  <text x="60" y="124" font-size="14.5" fill="#333">用户 echo 1 &gt; buffer/enable → 核心回调 set_trigger_state(true)</text>
+  <text x="60" y="150" font-size="14.5" fill="#333">→ regmap 写 INT_ENABLE bit0 = 1 → <tspan font-weight="bold">允许</tspan>芯片发中断(就这一次)</text>
+  <text x="60" y="178" font-size="13.5" fill="#777">此刻芯片还没发中断,触发器也没被踢 —— 只是"通了电"</text>
+  <text x="60" y="202" font-size="13.5" fill="#1e8449">类比:给门铃通电(通电本身不会让铃响)</text>
+
+  <!-- phase 2 -->
+  <rect x="40" y="236" width="860" height="170" rx="10" fill="#eafaf1" stroke="#1e8449" stroke-width="2"/>
+  <text x="60" y="264" font-size="17" font-weight="bold" fill="#1e8449">② 运行期(反复,每 10ms):用闸 —— 方向:芯片中断 → 触发器</text>
+  <text x="60" y="294" font-size="14.5" fill="#333">芯片测完一帧 → 拉 INT → 踢触发器 → pollfunc 读一帧入缓冲</text>
+  <text x="60" y="320" font-size="14.5" fill="#333">……100 次/秒,源源不断……</text>
+  <text x="60" y="348" font-size="13.5" fill="#1e8449">类比:通电后有人按门铃,铃才响(反复)</text>
+  <text x="60" y="378" font-size="13.5" fill="#777">触发器始终被动:被踢才响,踢它的是中断</text>
+
+  <line x1="470" y1="216" x2="470" y2="234" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+
+  <text x="470" y="446" text-anchor="middle" font-size="15.5" fill="#c0392b" font-weight="bold">先后不循环:先①开闸(一次,前提)→ 后②中断反复踢触发器(结果)</text>
+  <text x="470" y="476" text-anchor="middle" font-size="14" fill="#333">谁决定谁:要不要通电=用户(开缓冲)决定;通电后响不响=芯片(测完一帧)决定</text>
+  <text x="470" y="504" text-anchor="middle" font-size="14" fill="#333">echo 0 &gt; buffer/enable → set_trigger_state(false) → 关闸,一切停止</text>
+</svg>

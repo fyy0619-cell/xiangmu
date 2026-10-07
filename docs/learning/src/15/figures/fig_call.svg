@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="560" viewBox="0 0 940 560" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="938" height="558" fill="#fff" stroke="#d0d7de"/>
+  <text x="470" y="38" text-anchor="middle" font-size="23" font-weight="bold" fill="#0b3d91">调用方向永远向下:两条平行读路,都调 regmap</text>
+
+  <!-- road A -->
+  <text x="250" y="78" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e8449">路 A:单次读(cat)</text>
+  <g font-size="13.5">
+    <rect x="80" y="90" width="340" height="44" rx="7" fill="#eafaf1" stroke="#1e8449"/><text x="250" y="117" text-anchor="middle" fill="#333">用户 cat in_accel_x_raw</text>
+    <rect x="80" y="156" width="340" height="44" rx="7" fill="#e8eef8" stroke="#0b3d91"/><text x="250" y="183" text-anchor="middle" fill="#333">IIO 核心 iio_read_channel_info</text>
+    <rect x="80" y="222" width="340" height="44" rx="7" fill="#e8eef8" stroke="#0b3d91"/><text x="250" y="249" text-anchor="middle" fill="#333">mpu6050_read_raw(大脑)</text>
+    <rect x="80" y="288" width="340" height="44" rx="7" fill="#fff6ea" stroke="#b9770e"/><text x="250" y="315" text-anchor="middle" fill="#333">regmap_read ×2(工具/手)</text>
+  </g>
+
+  <!-- road B -->
+  <text x="690" y="78" text-anchor="middle" font-size="16" font-weight="bold" fill="#7d3c98">路 B:流式读(中断)</text>
+  <g font-size="13.5">
+    <rect x="520" y="90" width="340" height="44" rx="7" fill="#fdeaea" stroke="#c0392b"/><text x="690" y="117" text-anchor="middle" fill="#333">芯片 DRDY 中断 → 触发器</text>
+    <rect x="520" y="156" width="340" height="44" rx="7" fill="#f7f0ff" stroke="#7d3c98"/><text x="690" y="183" text-anchor="middle" fill="#333">pollfunc(trigger 踢它)</text>
+    <rect x="520" y="222" width="340" height="44" rx="7" fill="#e8eef8" stroke="#0b3d91"/><text x="690" y="249" text-anchor="middle" fill="#333">mpu6050_trigger_handler(大脑)</text>
+    <rect x="520" y="288" width="340" height="44" rx="7" fill="#fff6ea" stroke="#b9770e"/><text x="690" y="315" text-anchor="middle" fill="#333">regmap_bulk_read(工具/手)</text>
+  </g>
+
+  <g stroke="#0b3d91" stroke-width="2" marker-end="url(#a)">
+    <line x1="250" y1="134" x2="250" y2="154"/><line x1="250" y1="200" x2="250" y2="220"/><line x1="250" y1="266" x2="250" y2="286"/>
+    <line x1="690" y1="134" x2="690" y2="154"/><line x1="690" y1="200" x2="690" y2="220"/><line x1="690" y1="266" x2="690" y2="286"/>
+  </g>
+
+  <!-- merge to chip -->
+  <line x1="250" y1="332" x2="440" y2="372" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="690" y1="332" x2="500" y2="372" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="300" y="378" width="340" height="44" rx="7" fill="#fff6ea" stroke="#b9770e" stroke-width="1.6"/><text x="470" y="405" text-anchor="middle" font-size="13.5" fill="#333">regmap 内部 → i2c_transfer</text>
+  <line x1="470" y1="422" x2="470" y2="442" stroke="#0b3d91" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="300" y="448" width="340" height="44" rx="7" fill="#fdeaea" stroke="#c0392b" stroke-width="1.6"/><text x="470" y="475" text-anchor="middle" font-size="13.5" fill="#333">I2C 控制器 → 芯片寄存器</text>
+
+  <text x="470" y="522" text-anchor="middle" font-size="14.5" fill="#c0392b" font-weight="bold">箭头只朝下:上层调下层,regmap 绝不回头调 read_raw</text>
+  <text x="470" y="546" text-anchor="middle" font-size="13" fill="#555">唯一"回调"是核心调你的 read_raw / handler —— 那也是从上往下</text>
+</svg>
