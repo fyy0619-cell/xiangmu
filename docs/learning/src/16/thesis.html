@@ -4,25 +4,42 @@
 <meta charset="utf-8">
 <title>核心数据结构图解:struct iio_dev 与 pollfunc</title>
 <style>
-  @page { size: A4; margin: 20mm 18mm; }
-  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  @page { size: A4; margin: 19mm 17mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.6pt;
+         line-height:1.9; color:#232a33; -webkit-font-smoothing:antialiased; }
   h1 { font-size:21pt; color:#0b3d91; text-align:center; }
-  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
-  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
-  p { margin:7px 0; text-align:justify; }
-  li { margin:4px 0; }
-  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:9.6pt; }
-  th,td { border:1px solid #9bb0d0; padding:5px 8px; vertical-align:top; text-align:left; }
-  th { background:#e8eef8; color:#0b3d91; }
-  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
-  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.7pt; line-height:1.45; white-space:pre-wrap; }
-  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
-  figure img { max-width:97%; border:1px solid #e0e0e0; }
-  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
-  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
-  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
-  .cover { text-align:center; padding-top:155px; }
-  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  h2 { font-size:15pt; color:#0b3d91; margin:26px 0 13px; padding:7px 0 8px 15px;
+       border-left:5px solid #0b3d91; background:linear-gradient(90deg,#eef3fb 0%,#fafcff 70%,#fff 100%);
+       border-radius:4px; letter-spacing:.3px; }
+  h3 { font-size:12pt; color:#14459a; margin:18px 0 8px; padding-left:11px;
+       border-left:3px solid #9bb6e4; }
+  p { margin:9px 0; text-align:justify; }
+  b, strong { color:#0b2f73; }
+  li { margin:6px 0; }
+  ul { padding-left:22px; }
+  table { border-collapse:collapse; width:100%; margin:13px 0; font-size:9.7pt;
+          box-shadow:0 1px 3px rgba(11,61,145,.07); border-radius:6px; overflow:hidden; }
+  th,td { border:1px solid #dce4f0; padding:7px 11px; vertical-align:top; text-align:left; }
+  th { background:#0b3d91; color:#fff; font-weight:600; letter-spacing:.3px; border-color:#0b3d91; }
+  tr:nth-child(even) td { background:#f4f8fd; }
+  code { font-family:Consolas,"Courier New",monospace; background:#eef2f8; color:#0b3d91;
+         padding:1px 5px; border-radius:4px; font-size:9pt; }
+  pre { background:#f7f9fc; border:1px solid #e1e8f2; border-left:4px solid #5b8def;
+        border-radius:6px; padding:11px 14px; font-family:Consolas,"Courier New",monospace;
+        font-size:8.8pt; line-height:1.55; white-space:pre-wrap; color:#24303f; }
+  pre code { background:none; color:inherit; padding:0; }
+  figure { text-align:center; margin:16px 0; page-break-inside:avoid; }
+  figure img { max-width:97%; border:1px solid #e6e6e6; border-radius:7px;
+               box-shadow:0 2px 7px rgba(0,0,0,.09); }
+  figcaption { font-size:9.5pt; color:#667085; margin-top:7px; font-style:italic; }
+  .key { border-left:4px solid #1e8449; background:#f0faf3; margin:11px 0;
+         padding:9px 15px; color:#14502b; border-radius:0 6px 6px 0; }
+  blockquote { border-left:4px solid #f0a020; background:#fffaf0; margin:12px 0;
+               padding:9px 15px; color:#5a4a20; border-radius:0 6px 6px 0; }
+  .cover { text-align:center; padding-top:150px; }
+  .cover .big { font-size:25pt; font-weight:bold; color:#0b3d91; line-height:1.5; letter-spacing:1px; }
+  .cover .big::after { content:""; display:block; width:120px; height:3px; margin:22px auto 0;
+                       background:linear-gradient(90deg,#0b3d91,#5b8def); border-radius:2px; }
   .cover .sub { margin-top:20px; font-size:13pt; color:#555; }
   .pagebreak { page-break-before:always; }
 </style>
