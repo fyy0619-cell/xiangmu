@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="640" viewBox="0 0 940 640" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#0b3d91"/></marker>
+  <marker id="g" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#1e8449"/></marker></defs>
+  <rect x="1" y="1" width="938" height="638" fill="#fff" stroke="#d0d7de"/>
+  <text x="470" y="38" text-anchor="middle" font-size="23" font-weight="bold" fill="#0b3d91">pollfunc(工单):结构 + 它在哪一环</text>
+
+  <!-- left: struct -->
+  <rect x="36" y="64" width="420" height="330" rx="12" fill="#f7f0ff" stroke="#7d3c98" stroke-width="2.5"/>
+  <text x="246" y="90" text-anchor="middle" font-size="15.5" font-weight="bold" fill="#7d3c98">struct iio_poll_func</text>
+  <g font-size="12.5" fill="#333">
+    <text x="56" y="124">struct iio_dev *indio_dev;</text>
+    <text x="70" y="142" fill="#777" font-size="11">回指设备 → 底半部靠它拿 regmap</text>
+    <text x="56" y="172" fill="#0b3d91">irqreturn_t (*h)(int,void*);</text>
+    <text x="70" y="190" fill="#777" font-size="11">顶半部 = iio_pollfunc_store_time</text>
+    <text x="56" y="220" fill="#1e8449">irqreturn_t (*thread)(int,void*);</text>
+    <text x="70" y="238" fill="#777" font-size="11">底半部 = mpu6050_trigger_handler</text>
+    <text x="56" y="268">int type;</text><text x="200" y="268" fill="#777" font-size="11">中断 flags(IRQF_ONESHOT)</text>
+    <text x="56" y="296">struct list_head list;</text><text x="230" y="296" fill="#777" font-size="11">挂进触发器链表</text>
+    <text x="56" y="324">void *data;</text><text x="200" y="324" fill="#777" font-size="11">备用(未用)</text>
+    <text x="56" y="352" fill="#c0392b">s64 timestamp;</text><text x="200" y="352" fill="#c0392b" font-size="11">★顶半部写、底半部读★</text>
+  </g>
+
+  <!-- right: position -->
+  <text x="700" y="88" text-anchor="middle" font-size="15.5" font-weight="bold" fill="#0b3d91">它夹在触发器与缓冲之间</text>
+  <rect x="560" y="104" width="300" height="44" rx="7" fill="#fdeaea" stroke="#c0392b"/><text x="710" y="131" text-anchor="middle" font-size="13" fill="#333">trigger 响(被中断踢)</text>
+  <rect x="560" y="178" width="300" height="100" rx="7" fill="#f7f0ff" stroke="#7d3c98" stroke-width="2"/>
+  <text x="710" y="202" text-anchor="middle" font-size="13.5" font-weight="bold" fill="#7d3c98">pollfunc 工单</text>
+  <text x="710" y="226" text-anchor="middle" font-size="12" fill="#0b3d91">① h:记时间戳(快,中断上下文)</text>
+  <text x="710" y="248" text-anchor="middle" font-size="12" fill="#1e8449">② thread:读14字节→塞缓冲(线程)</text>
+  <text x="710" y="268" text-anchor="middle" font-size="11" fill="#777">①返回 WAKE_THREAD 唤醒②</text>
+  <rect x="560" y="308" width="300" height="44" rx="7" fill="#eafaf1" stroke="#1e8449"/><text x="710" y="335" text-anchor="middle" font-size="13" fill="#333">buffer(kfifo)→ /dev/iio:device0</text>
+
+  <g stroke="#0b3d91" stroke-width="2" marker-end="url(#a)">
+    <line x1="710" y1="148" x2="710" y2="176"/>
+    <line x1="710" y1="278" x2="710" y2="306"/>
+  </g>
+
+  <!-- bottom: runtime relay note -->
+  <rect x="36" y="420" width="868" height="90" rx="10" fill="#eef4ff" stroke="#0b3d91"/>
+  <text x="60" y="448" font-size="14" font-weight="bold" fill="#0b3d91">运行时接力(为什么分两半)</text>
+  <text x="60" y="474" font-size="13" fill="#333">① h 在中断上下文,必须极快、不能睡眠 → 只记 timestamp,返回 IRQ_WAKE_THREAD</text>
+  <text x="60" y="498" font-size="13" fill="#333">② thread 在内核线程,可睡眠 → regmap_bulk_read 读 I2C + iio_push_to_buffers_with_timestamp(用 pf-&gt;timestamp)</text>
+
+  <rect x="36" y="528" width="868" height="86" rx="10" fill="#fff8ec" stroke="#f0a020"/>
+  <text x="470" y="556" text-anchor="middle" font-size="14" fill="#5a4a20" font-weight="bold">一句话:pollfunc 把"记时间"和"读数据塞缓冲"两个函数打包成一张工单</text>
+  <text x="470" y="582" text-anchor="middle" font-size="13" fill="#5a4a20">触发器一响就按工单执行;时间戳格子让两半接力(①写②读)</text>
+  <text x="470" y="604" text-anchor="middle" font-size="12.5" fill="#5a4a20">存在 indio_dev-&gt;pollfunc,是独立一块内存</text>
+</svg>

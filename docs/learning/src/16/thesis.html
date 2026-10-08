@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>核心数据结构图解:struct iio_dev 与 pollfunc</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.5pt; line-height:1.78; color:#1a1a1a; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; border-bottom:2px solid #0b3d91; padding-bottom:3px; margin-top:22px; }
+  h3 { font-size:12pt; color:#123a7a; margin-top:14px; }
+  p { margin:7px 0; text-align:justify; }
+  li { margin:4px 0; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:9.6pt; }
+  th,td { border:1px solid #9bb0d0; padding:5px 8px; vertical-align:top; text-align:left; }
+  th { background:#e8eef8; color:#0b3d91; }
+  code { font-family:Consolas,monospace; background:#f2f4f8; padding:1px 4px; border-radius:3px; font-size:9pt; }
+  pre { background:#f6f8fa; border:1px solid #d0d7de; border-radius:5px; padding:9px; font-family:Consolas,monospace; font-size:8.7pt; line-height:1.45; white-space:pre-wrap; }
+  figure { text-align:center; margin:12px 0; page-break-inside:avoid; }
+  figure img { max-width:97%; border:1px solid #e0e0e0; }
+  figcaption { font-size:9.5pt; color:#444; margin-top:5px; }
+  .key { border-left:4px solid #1e8449; background:#eefaf1; margin:9px 0; padding:7px 12px; color:#14502b; }
+  blockquote { border-left:4px solid #f0a020; background:#fff8ec; margin:10px 0; padding:8px 14px; color:#5a4a20; }
+  .cover { text-align:center; padding-top:155px; }
+  .cover .big { font-size:24pt; font-weight:bold; color:#0b3d91; line-height:1.5; }
+  .cover .sub { margin-top:20px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">核心数据结构图解<br>struct iio_dev 与 pollfunc</div>
+  <div class="sub">IIO 设备的"总枢纽"与触发缓冲的"工单" —— 内部结构 · 字段 · 创建</div>
+  <div class="sub" style="margin-top:70px;font-size:12pt;">MPU-6050 IIO 驱动学习 · 数据结构篇 · 2026 年 10 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>导读</h2>
+<p>触发缓冲驱动里有两个结构体最该吃透:<b><code>struct iio_dev</code></b>(整个 IIO 设备的总枢纽,probe 里填它、注册它)和 <b><code>struct iio_poll_func</code>(pollfunc)</b>(触发器与缓冲之间的"工单")。本文用图+表把它们的<b>内部结构、每个字段、在哪创建</b>讲清。</p>
+
+<h2>一、struct iio_dev:IIO 设备的总枢纽</h2>
+<p><code>indio_dev</code> 是指向 <code>struct iio_dev</code> 的指针。这个结构体把"设备是谁、能干啥、怎么读、运行时挂了哪些机制"全登记在一起。按作用分四组看:</p>
+<figure><img src="figures/fig_iiodev.png"><figcaption>图 1　struct iio_dev 内部结构(四组字段 + 指向的外部对象 + 尾随的私有数据)</figcaption></figure>
+<table>
+  <tr><th>组</th><th>字段</th><th>作用</th></tr>
+  <tr><td rowspan="3"><b>A 身份</b></td><td><code>id</code></td><td>第几个 IIO 设备 → <code>iio:device0</code> 的 0;触发器名 <code>"%s-dev%d"</code> 的 %d</td></tr>
+  <tr><td><code>name</code></td><td>设备名 <code>"mpu6050"</code> → <code>/sys/.../name</code></td></tr>
+  <tr><td><code>dev</code></td><td><b>内嵌</b>的 <code>struct device</code>(Linux 设备模型对象,sysfs 目录由它生成)</td></tr>
+  <tr><td rowspan="2"><b>B 能力</b></td><td><code>modes</code></td><td>支持的模式:<code>INDIO_DIRECT_MODE</code>;触发缓冲补 <code>INDIO_BUFFER_TRIGGERED</code></td></tr>
+  <tr><td><code>currentmode</code></td><td>当前所处模式(核心维护)</td></tr>
+  <tr><td rowspan="2"><b>C 核心(你填)</b></td><td><code>info</code></td><td>指向 <code>iio_info</code> 回调表(含 <code>read_raw</code>)</td></tr>
+  <tr><td><code>channels</code>/<code>num_channels</code></td><td>指向通道表+数量 → 核心据此生成 sysfs、解析缓冲帧</td></tr>
+  <tr><td rowspan="2"><b>D 运行时</b></td><td><code>buffer</code>/<code>pollfunc</code>/<code>trig</code></td><td>指向 kfifo 缓冲 / 工单 / 当前触发器(核心填)</td></tr>
+  <tr><td><code>scan_bytes</code>/<code>active_scan_mask</code></td><td>开缓冲时核心算:选了哪些通道、一帧多少字节</td></tr>
+</table>
+<div class="key"><b>三种"住处"要分清:</b>① <b>内嵌</b>(值/对象就在结构体里):id、name、modes、dev;② <b>指针</b>(指向外面独立的块):info、channels、buffer、pollfunc、trig;③ <b>私有数据</b> <code>mpu6050_data</code> <b>不是 iio_dev 的字段</b>,而是 <code>devm_iio_device_alloc</code> 时紧跟其后的一段,用 <code>iio_priv(indio_dev)</code> 取。</div>
+<p>所以 probe 的本质就是:<b>填好 C 组(info/channels)→ 建起 D 组(缓冲/触发器)→ 注册</b>。核心运行时就靠读这张"登记表"来回调你、生成接口、搬数据。</p>
+
+<div class="pagebreak"></div>
+<h2>二、pollfunc:触发器与缓冲之间的"工单"</h2>
+<p>触发器只会喊"滴答",它不知道该读什么;缓冲是目标,但得有人去填。<code>pollfunc</code> 就是夹在中间的工单,写明"<b>滴答一到,先记时间,再读一帧塞进缓冲</b>"。</p>
+<figure><img src="figures/fig_pollfunc.png"><figcaption>图 2　pollfunc 的结构(左)与它在"触发器→缓冲"链条中的位置(右)</figcaption></figure>
+<h3>2.1 结构字段</h3>
+<pre>struct iio_poll_func {
+    struct iio_dev *indio_dev;              // 回指设备 → 底半部靠它拿 regmap
+    irqreturn_t (*h)(int irq, void *p);     // 顶半部 = iio_pollfunc_store_time
+    irqreturn_t (*thread)(int irq, void *p);// 底半部 = mpu6050_trigger_handler
+    int type;                               // 中断 flags(IRQF_ONESHOT)
+    struct list_head list;                  // 挂进触发器的消费者链表
+    void *data;                             // 备用(未用)
+    s64 timestamp;                          // ★顶半部写、底半部读★
+};</pre>
+<table>
+  <tr><th>字段</th><th>在本项目是谁</th><th>作用</th></tr>
+  <tr><td><code>indio_dev</code></td><td>iio:device0</td><td>底半部 <code>iio_priv</code> 拿到 regmap</td></tr>
+  <tr><td><code>h</code></td><td><code>iio_pollfunc_store_time</code></td><td>滴答瞬间记时间戳到 <code>timestamp</code>(快,中断上下文)</td></tr>
+  <tr><td><code>thread</code></td><td><code>mpu6050_trigger_handler</code></td><td>线程里 <code>regmap_bulk_read</code> + push 进缓冲(可睡眠)</td></tr>
+  <tr><td><code>type</code></td><td><code>IRQF_ONESHOT</code></td><td>决定这张工单的虚拟中断怎么申请</td></tr>
+  <tr><td><code>timestamp</code></td><td>—</td><td>顶半部写、底半部读:<code>iio_push_...(.., pf-&gt;timestamp)</code></td></tr>
+</table>
+<h3>2.2 两半如何接力</h3>
+<p>绑定到触发器时,核心按"线程化中断"把 <code>h</code> 当硬处理、<code>thread</code> 当线程函数。触发器一响:<b>① <code>h</code> 记时间戳,返回 <code>IRQ_WAKE_THREAD</code> 唤醒线程 → ② <code>thread</code> 在线程里读 I2C、push 进缓冲</b>(用 ① 记下的 <code>pf-&gt;timestamp</code>)。拆两半是因为:① 在中断上下文必须极快、不能睡眠;② I2C 读会睡眠,必须放线程——这正是内核"中断上下半部"的标准分工。</p>
+
+<h3>2.3 它在哪被创建</h3>
+<figure><img src="figures/fig_pollfunc_create.png"><figcaption>图 3　pollfunc 的创建调用链:你传两个函数进去,核心帮你建</figcaption></figure>
+<p>你<b>不直接</b> new 一个 pollfunc,而是把两个函数交给 <code>devm_iio_triggered_buffer_setup</code>,它内部 <code>iio_alloc_pollfunc(h, thread, IRQF_ONESHOT, ...)</code> 把它们包进一张新工单,指针存进 <code>indio_dev-&gt;pollfunc</code>(独立一块内存);同时还分配 kfifo 缓冲。<code>devm_</code> 负责移除时自动释放。运行时再由 <code>current_trigger</code> 把这张工单挂到触发器上。</p>
+
+<h2>三、两者的关系(收口)</h2>
+<div class="key"><b>indio_dev 是总枢纽,pollfunc 是它 D 组里的一个成员(<code>indio_dev-&gt;pollfunc</code>)。</b>probe 填好 iio_dev 的 C 组、建起 D 组(其中 <code>devm_iio_triggered_buffer_setup</code> 顺带造出 pollfunc 和缓冲)、再注册。运行时核心通过 iio_dev 这张登记表找到 info/channels/buffer/trig/pollfunc,把整条"触发→工单→缓冲"的数据流跑起来。</div>
+
+<blockquote>本文为 MPU-6050 IIO 驱动学习的数据结构篇,承接剖析篇。系列文档见 <code>docs/learning/</code>;配套代码见 <code>examples/learning-driver/</code>。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>

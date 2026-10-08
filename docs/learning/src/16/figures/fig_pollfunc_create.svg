@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="470" viewBox="0 0 940 470" font-family="Microsoft YaHei, Segoe UI, sans-serif">
+  <defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#0b3d91"/></marker></defs>
+  <rect x="1" y="1" width="938" height="468" fill="#fff" stroke="#d0d7de"/>
+  <text x="470" y="38" text-anchor="middle" font-size="23" font-weight="bold" fill="#0b3d91">pollfunc 在哪被创建(你没亲手建)</text>
+
+  <rect x="120" y="66" width="700" height="60" rx="8" fill="#e8eef8" stroke="#0b3d91" stroke-width="2"/>
+  <text x="470" y="90" text-anchor="middle" font-size="14" font-weight="bold" fill="#0b3d91">probe: devm_iio_triggered_buffer_setup(dev, indio_dev, h, thread, NULL)</text>
+  <text x="470" y="112" text-anchor="middle" font-size="12.5" fill="#333">你只是把两个函数交进去:h=iio_pollfunc_store_time,thread=mpu6050_trigger_handler</text>
+
+  <rect x="120" y="156" width="700" height="50" rx="8" fill="#f2f6ff" stroke="#9bb0d0"/>
+  <text x="470" y="186" text-anchor="middle" font-size="13.5" fill="#333">→ iio_triggered_buffer_setup(...)</text>
+
+  <rect x="120" y="236" width="700" height="66" rx="8" fill="#f7f0ff" stroke="#7d3c98" stroke-width="2"/>
+  <text x="470" y="262" text-anchor="middle" font-size="14" font-weight="bold" fill="#7d3c98">→ indio_dev-&gt;pollfunc = iio_alloc_pollfunc(h, thread, IRQF_ONESHOT, ...)</text>
+  <text x="470" y="286" text-anchor="middle" font-size="12.5" fill="#333">★ pollfunc 在这里被 kmalloc 出来,把你的两个函数包进去 ★</text>
+
+  <rect x="120" y="332" width="700" height="50" rx="8" fill="#eafaf1" stroke="#1e8449"/>
+  <text x="470" y="362" text-anchor="middle" font-size="13.5" fill="#333">同时:分配 kfifo 缓冲、设置 setup_ops;devm 负责移除时自动释放</text>
+
+  <g stroke="#0b3d91" stroke-width="2" marker-end="url(#a)">
+    <line x1="470" y1="126" x2="470" y2="154"/>
+    <line x1="470" y1="206" x2="470" y2="234"/>
+    <line x1="470" y1="302" x2="470" y2="330"/>
+  </g>
+
+  <text x="470" y="420" text-anchor="middle" font-size="14" fill="#c0392b" font-weight="bold">结果:工单指针存进 indio_dev-&gt;pollfunc(独立一块内存)</text>
+  <text x="470" y="446" text-anchor="middle" font-size="13" fill="#555">运行时再由 current_trigger 把它挂到触发器上</text>
+</svg>
