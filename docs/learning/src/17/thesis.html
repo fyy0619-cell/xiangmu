@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>里程碑·实测闭环:DRDY 硬件中断触发缓冲</title>
+<style>
+  @page { size: A4; margin: 19mm 17mm; }
+  body { font-family:"Microsoft YaHei","微软雅黑",SimSun,serif; font-size:10.6pt;
+         line-height:1.9; color:#232a33; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:21pt; color:#0b3d91; text-align:center; }
+  h2 { font-size:15pt; color:#0b3d91; margin:26px 0 13px; padding:7px 0 8px 15px;
+       border-left:5px solid #0b3d91; background:linear-gradient(90deg,#eef3fb 0%,#fafcff 70%,#fff 100%);
+       border-radius:4px; letter-spacing:.3px; }
+  h3 { font-size:12pt; color:#14459a; margin:18px 0 8px; padding-left:11px; border-left:3px solid #9bb6e4; }
+  p { margin:9px 0; text-align:justify; }
+  b, strong { color:#0b2f73; }
+  li { margin:6px 0; } ul { padding-left:22px; }
+  table { border-collapse:collapse; width:100%; margin:13px 0; font-size:9.7pt;
+          box-shadow:0 1px 3px rgba(11,61,145,.07); border-radius:6px; overflow:hidden; }
+  th,td { border:1px solid #dce4f0; padding:7px 11px; vertical-align:top; text-align:left; }
+  th { background:#0b3d91; color:#fff; font-weight:600; letter-spacing:.3px; border-color:#0b3d91; }
+  tr:nth-child(even) td { background:#f4f8fd; }
+  code { font-family:Consolas,"Courier New",monospace; background:#eef2f8; color:#0b3d91;
+         padding:1px 5px; border-radius:4px; font-size:9pt; }
+  pre { background:#f7f9fc; border:1px solid #e1e8f2; border-left:4px solid #5b8def;
+        border-radius:6px; padding:11px 14px; font-family:Consolas,"Courier New",monospace;
+        font-size:8.6pt; line-height:1.5; white-space:pre-wrap; color:#24303f; }
+  figure { text-align:center; margin:16px 0; page-break-inside:avoid; }
+  figure img { max-width:97%; border:1px solid #e6e6e6; border-radius:7px; box-shadow:0 2px 7px rgba(0,0,0,.09); }
+  figcaption { font-size:9.5pt; color:#667085; margin-top:7px; font-style:italic; }
+  .key { border-left:4px solid #1e8449; background:#f0faf3; margin:11px 0; padding:9px 15px; color:#14502b; border-radius:0 6px 6px 0; }
+  blockquote { border-left:4px solid #f0a020; background:#fffaf0; margin:12px 0; padding:9px 15px; color:#5a4a20; border-radius:0 6px 6px 0; }
+  .cover { text-align:center; padding-top:155px; }
+  .cover .big { font-size:25pt; font-weight:bold; color:#0b3d91; line-height:1.5; letter-spacing:1px; }
+  .cover .big::after { content:""; display:block; width:120px; height:3px; margin:22px auto 0; background:linear-gradient(90deg,#0b3d91,#5b8def); border-radius:2px; }
+  .cover .sub { margin-top:20px; font-size:13pt; color:#555; }
+  .pagebreak { page-break-before:always; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="big">里程碑 · 实测闭环<br>DRDY 硬件中断触发缓冲</div>
+  <div class="sub">在真实 STM32MP157 + MPU-6050 上,流式采集实测通过</div>
+  <div class="sub" style="margin-top:70px;font-size:12pt;">MPU-6050 IIO 驱动学习 · 收官 · 2026 年 10 月</div>
+</div>
+
+<div class="pagebreak"></div>
+<h2>一、验收结论</h2>
+<p>驱动的流式采集路径(<b>芯片 DRDY 硬件中断 → IIO 触发器 → 触发缓冲 → <code>/dev/iio:device0</code></b>)已在真实硬件上跑通并取得完整证据。至此,MPU-6050 IIO 驱动的两条数据通路——单次读(sysfs)与流式读(缓冲)——全部实测通过。</p>
+<table>
+  <tr><th>验收项</th><th>证据</th><th>结论</th></tr>
+  <tr><td>硬件中断触发</td><td>IRQ 54 <code>mpu6050_drdy</code>(stm32gpio 第 6 线 = PZ6,Edge)计数持续增长</td><td>✅ 中断真在驱动采集</td></tr>
+  <tr><td>成帧流式输出</td><td><code>/dev/iio:device0</code> 吐出规整 16 字节/帧</td><td>✅ 缓冲通路打通</td></tr>
+  <tr><td>数据真实</td><td>解码出 ≈1g 重力,随姿态变化</td><td>✅ 非乱码</td></tr>
+  <tr><td>采样节拍</td><td>相邻帧时间戳间隔 ≈ 10 ms</td><td>✅ 100 Hz,与配置一致</td></tr>
+</table>
+
+<h2>二、实测原始输出</h2>
+<p>绑定触发器、使能加速度 X/Y/Z + 时间戳通道、开缓冲后,读 <code>/dev/iio:device0</code>:</p>
+<pre>$ head -c 256 /dev/iio:device0 | hexdump -C
+00000000  c6 48 0f 2c 02 88 f4 07  0d a7 7f 31 56 73 29 0d  |.H.,.......1Vs).|
+00000010  c6 44 0f 5a 02 68 f4 0f  c0 ee 16 32 56 73 29 0d  |.D.Z.h.....2Vs).|
+00000020  c6 34 0f 80 02 46 f4 0f  56 42 ae 32 56 73 29 0d  |.4...F..VB.2Vs).|
+00000030  c6 2e 0f 6e 02 be f4 11  80 92 45 33 56 73 29 0d  |...n......E3Vs).|
+   ... (每行 = 一帧 16 字节,持续流出)
+
+$ cat /proc/interrupts | grep mpu6050_drdy
+ 54:   5775   0   stm32gpio  6 Edge   mpu6050_drdy     ← 持续增长</pre>
+
+<h2>三、一帧怎么解码</h2>
+<figure><img src="figures/fig_decode.png"><figcaption>图 1　16 字节帧结构解码:加速度 ≈1g 重力 + 时间戳间隔 ≈10ms(100Hz)</figcaption></figure>
+<p>每帧 16 字节 = <code>AX AY AZ</code>(各 2 字节、有符号、大端)+ 2 字节填充 + 8 字节时间戳(小端,ns)。第 0 帧:X=-14776、Y=3884、Z=648,乘 scale(0.00059855)得 (-8.84, +2.32, +0.39) m/s²,合加速度 ≈ <b>9.16 m/s² ≈ 0.93 g</b> —— 正是重力(板子静放、偏 -X 方向)。相邻帧时间戳差 ≈ <b>9.91 ms ≈ 100 Hz</b>,与 <code>SMPLRT_DIV=9</code> + DLPF(1kHz 基准)配置一致。</p>
+
+<h2>四、项目收官</h2>
+<div class="key"><b>一句话总结:</b>MPU-6050 IIO 驱动,支持 sysfs 单次读(raw/scale/offset)与 DRDY 硬件中断驱动的触发缓冲流式采集,已在真实 STM32MP157(正点原子 ATK-DLMP157 V1.5,内核 5.4.31)上<b>实测通过</b>。从接线、设备树、交叉编译、NFS 部署到流式验证,完整走通并留存证据链。</div>
+<p>面试可一句话讲清:"把 MPU-6050 接入 Linux IIO 子系统,实现单次读与基于硬件数据就绪中断的触发缓冲流式采集,真机 100Hz 验证通过"——并能展开讲清触发器/缓冲/pollfunc 的分工、中断上下半部、以及软硬件边界。</p>
+
+<blockquote>本文为 MPU-6050 IIO 驱动学习的收官里程碑(流式采集实测闭环),承接进阶篇/剖析篇/数据结构篇。系列文档见 <code>docs/learning/</code>;配套代码见 <code>examples/learning-driver/</code> 与 <code>drivers/iio/imu/mpu6050/</code>。仓库:github.com/fyy0619-cell/xiangmu</blockquote>
+
+</body>
+</html>
